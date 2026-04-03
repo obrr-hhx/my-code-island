@@ -52,6 +52,7 @@ final class TrackedSession: Identifiable {
     var status: SessionStatus = .idle
     var lastActivity: Date = Date()
     var isAlive: Bool = true
+    var activeSubagentCount: Int = 0
 
     var id: String { session.id }
     var projectName: String { session.projectName }

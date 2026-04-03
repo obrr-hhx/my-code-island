@@ -106,6 +106,73 @@ final class ChiptuneEngine {
         playNoise(duration: 0.02, volume: 0.15)
     }
 
+    /// Sleep chime - soft descending lullaby
+    func playSleepChime() {
+        guard !isMuted else { return }
+        let notes: [(freq: Double, duration: Double)] = [
+            (440, 0.15),   // A4
+            (392, 0.15),   // G4
+            (349, 0.20),   // F4
+        ]
+        playArpeggio(notes, waveform: .triangle)
+    }
+
+    /// Wake up - bright ascending arpeggio
+    func playWakeUp() {
+        guard !isMuted else { return }
+        let notes: [(freq: Double, duration: Double)] = [
+            (262, 0.06),   // C4
+            (330, 0.06),   // E4
+            (392, 0.06),   // G4
+            (523, 0.10),   // C5
+        ]
+        playArpeggio(notes, waveform: .square)
+    }
+
+    /// Error - buzzy descending with noise
+    func playError() {
+        guard !isMuted else { return }
+        let notes: [(freq: Double, duration: Double)] = [
+            (200, 0.08),
+            (150, 0.08),
+            (100, 0.12),
+        ]
+        playArpeggio(notes, waveform: .sawtooth)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
+            self?.playNoise(duration: 0.05, volume: 0.2)
+        }
+    }
+
+    /// Celebration - triumphant fanfare
+    func playCelebration() {
+        guard !isMuted else { return }
+        let notes: [(freq: Double, duration: Double)] = [
+            (523, 0.06),   // C5
+            (659, 0.06),   // E5
+            (784, 0.06),   // G5
+            (1047, 0.08),  // C6
+            (784, 0.04),   // G5
+            (1047, 0.12),  // C6
+        ]
+        playArpeggio(notes, waveform: .square)
+    }
+
+    /// Sweep - whooshing noise
+    func playSweep() {
+        guard !isMuted else { return }
+        playNoise(duration: 0.08, volume: 0.1)
+    }
+
+    /// Poke - cute boing
+    func playPoke() {
+        guard !isMuted else { return }
+        let notes: [(freq: Double, duration: Double)] = [
+            (880, 0.03),   // A5
+            (1320, 0.05),  // E6
+        ]
+        playArpeggio(notes, waveform: .triangle)
+    }
+
     // MARK: - Waveform Generation
 
     private enum Waveform {

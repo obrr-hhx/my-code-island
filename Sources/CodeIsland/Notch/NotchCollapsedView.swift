@@ -18,6 +18,7 @@ struct NotchCollapsedView: View {
     @State private var pulsePhase: Bool = false
 
     private var clawdPose: ClawdPose {
+        // Permission takes highest priority
         if !appState.pendingPermissions.isEmpty {
             return .alert
         }
@@ -25,20 +26,29 @@ struct NotchCollapsedView: View {
         if statuses.contains(.waitingPermission) {
             return .alert
         }
-        if statuses.contains(where: { if case .running(let t) = $0 { return t != nil }; return false }) {
-            return .lookRight  // tool running
+
+        // Map behavior to pose
+        switch appState.clawdBehavior {
+        case .sleeping: return .sleeping
+        case .error: return .error
+        case .celebrating: return .happy
+        case .sweeping: return .sweeping
+        case .carrying: return .carrying
+        case .juggling: return .juggling
+        case .conducting: return .conducting
+        case .toolUse: return .lookRight
+        case .thinking: return .thinking
+        case .idle: return .default_
         }
-        if statuses.contains(where: { if case .running = $0 { return true }; return false }) {
-            return .thinking  // running but no specific tool
-        }
-        return .default_
     }
 
     var body: some View {
         HStack(spacing: 0) {
             // === LEFT WING: Clawd + label ===
+            // clipped() so notch-peek animations get hidden at the wing/notch boundary
             leftWing
                 .frame(width: notchGeometry.leftWidth, height: notchGeometry.height)
+                .clipped()
 
             // === NOTCH GAP: invisible, skip this area ===
             Color.clear
@@ -69,8 +79,19 @@ struct NotchCollapsedView: View {
 
     private var leftWing: some View {
         HStack(spacing: 6) {
-            ClawdView(pixelSize: 2.5, pose: clawdPose, animated: true)
-                .frame(width: 32, height: 26)
+            ZStack {
+                ClawdView(pixelSize: 2.5, pose: clawdPose, behavior: appState.clawdBehavior, animated: true, notchMode: true)
+                    .frame(width: 32, height: 26)
+
+                // Error flash overlay
+                if appState.clawdBehavior == .error {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.red.opacity(pulsePhase ? 0.3 : 0.0))
+                        .frame(width: 32, height: 26)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(width: 32, height: 26)
 
             // Thin separator
             RoundedRectangle(cornerRadius: 1)
