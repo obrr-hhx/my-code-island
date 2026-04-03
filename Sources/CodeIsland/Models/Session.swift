@@ -2,7 +2,7 @@ import Foundation
 
 /// Represents a Claude Code session discovered from ~/.claude/sessions/.
 struct ClaudeSession: Identifiable, Codable {
-    let pid: Int
+    var pid: Int
     let sessionId: String
     let cwd: String
     let startedAt: TimeInterval  // milliseconds since epoch
@@ -10,6 +10,14 @@ struct ClaudeSession: Identifiable, Codable {
     var entrypoint: String?
 
     var id: String { sessionId }
+
+    /// Return a copy with an updated PID (if the new PID is valid).
+    func withPID(_ newPid: Int) -> ClaudeSession {
+        guard newPid > 0 else { return self }
+        var copy = self
+        copy.pid = newPid
+        return copy
+    }
 
     /// Human-readable project name.
     var projectName: String {
@@ -48,7 +56,7 @@ enum SessionStatus: Equatable {
 /// Combined session info: file-based discovery + runtime state.
 @Observable
 final class TrackedSession: Identifiable {
-    let session: ClaudeSession
+    var session: ClaudeSession
     var status: SessionStatus = .idle
     var lastActivity: Date = Date()
     var isAlive: Bool = true
@@ -69,6 +77,8 @@ final class TrackedSession: Identifiable {
     }
 
     func checkAlive() {
+        // pid=0 means we never resolved the real PID — treat as dead
+        guard pid > 0 else { isAlive = false; return }
         isAlive = kill(Int32(pid), 0) == 0
     }
 }

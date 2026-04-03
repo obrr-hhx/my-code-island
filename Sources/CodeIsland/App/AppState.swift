@@ -238,19 +238,45 @@ final class AppState {
 
         if let existing = sessions.first(where: { $0.session.sessionId == sessionId }) {
             existing.isAlive = true
+            // Back-fill PID from disk session file if we don't have one
+            if existing.pid == 0 {
+                existing.session = existing.session.withPID(Self.readPIDFromDisk(sessionId: sessionId))
+            }
             return existing
         }
 
         let cwd = event.payload.cwd ?? "~"
-        let session = ClaudeSession(pid: 0, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000)
+        let pid = Self.readPIDFromDisk(sessionId: sessionId)
+        let session = ClaudeSession(pid: pid, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000)
         let tracked = TrackedSession(session: session)
         sessions.append(tracked)
         return tracked
     }
 
+    /// Scan ~/.claude/sessions/ to find the PID for a given session UUID.
+    /// Files are named by PID (e.g. 48308.json), content contains sessionId.
+    private static func readPIDFromDisk(sessionId: String) -> Int {
+        let dir = CodeIslandConstants.claudeSessionsDir
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return 0 }
+        for file in files where file.hasSuffix(".json") {
+            let path = (dir as NSString).appendingPathComponent(file)
+            guard let data = fm.contents(atPath: path),
+                  let session = try? JSONDecoder().decode(ClaudeSession.self, from: data),
+                  session.sessionId == sessionId else { continue }
+            return session.pid
+        }
+        return 0
+    }
+
     func refreshSessions(_ diskSessions: [ClaudeSession]) {
         for ds in diskSessions {
-            if !sessions.contains(where: { $0.session.sessionId == ds.sessionId }) {
+            if let existing = sessions.first(where: { $0.session.sessionId == ds.sessionId }) {
+                // Update PID from disk if hook-created session had pid=0
+                if existing.pid == 0 && ds.pid > 0 {
+                    existing.session = ds
+                }
+            } else {
                 sessions.append(TrackedSession(session: ds))
             }
         }
