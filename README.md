@@ -8,8 +8,12 @@ A macOS native app that turns your MacBook's notch into a control center for mon
 - **Real-time Session Monitoring** — Tracks Claude Code's query loop lifecycle: idle → running → tool use → idle
 - **Permission Approval from Notch** — When Claude Code asks for permission, approve or deny directly from the notch panel without switching to the terminal
 - **8-bit Retro Aesthetic** — Pixel fonts, character scatter animations, dot wave backgrounds, CRT scanlines, glitch text effects
-- **Clawd Mascot** — Pixel art Claude Code mascot faithfully reproduced from source (Unicode block art → sub-pixel grid, height-doubled for correct aspect ratio). Frame-based animation system (60ms/frame) with click-triggered sequences (jump wave, look around) and state-driven idle behavior
-- **Chiptune Sound Effects** — 8-bit synthesized sounds for permission alerts, approvals, denials, and notifications
+- **Clawd Mascot** — Pixel art Claude Code mascot faithfully reproduced from source (Unicode block art → sub-pixel grid, height-doubled for correct aspect ratio). Rich animation system inspired by [clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk):
+  - **State-driven animations** — Sleep (yawn → doze → Zzz particles), error shake + smoke, celebration sparkles, sweeping (context compaction), carrying (worktree creation), juggling/conducting (subagent tracking)
+  - **Notch interactions** — Clawd peeks behind the physical notch cutout, hangs from the bottom edge, hides and peeks back out — hardware-aware hide-and-seek
+  - **Click reactions** — Single click (jump/look around), double-click (poke squish), 4+ clicks (flailing arms + sparkles)
+  - **Particle system** — Canvas-overlay particles: sparkles, Zzz, smoke, stars with independent render loop
+- **Chiptune Sound Effects** — 8-bit synthesized sounds for permission alerts, approvals, denials, notifications, sleep/wake, errors, celebrations, and poke reactions
 - **Three Permission Modes** — Observe (default), Always Allow (bypass), Manual (approve everything)
 - **Zero Dependencies** — Pure Swift, no Electron, no external frameworks. ~1.5MB total binary size, sub-50MB RAM
 
@@ -53,6 +57,8 @@ Claude Code                    Code Island
 │ Request    │                    │       │        │
 │ Subagent*  │                    │       ▼        │
 │ UserPrompt │                    │   AppState     │
+│ PreCompact │                    │       │        │
+│ WorktreeC* │                    │       │        │
 │ Notification                    │       │        │
 └────────────┘                    │       ▼        │
                                   │  Notch Panel   │
@@ -75,13 +81,15 @@ Claude Code                    Code Island
 Status follows Claude Code's query loop exactly:
 
 ```
-UserPromptSubmit → RUNNING        (loop starts)
-PreToolUse       → RUNNING "Bash" (tool starting)
-PostToolUse      → RUNNING        (tool done, loop continues)
-SubagentStart    → RUNNING        (background agent launched)
-SubagentStop     → RUNNING        (background agent done)
-PermissionRequest→ WAITING        (needs user approval)
-Stop             → IDLE           (loop ended)
+UserPromptSubmit → RUNNING        (loop starts)       → Clawd: thinking
+PreToolUse       → RUNNING "Bash" (tool starting)     → Clawd: lookRight
+PostToolUse      → RUNNING        (tool done)         → Clawd: error shake (on failure)
+SubagentStart    → RUNNING        (agent launched)    → Clawd: juggling / conducting
+SubagentStop     → RUNNING        (agent done)
+PermissionRequest→ WAITING        (needs approval)    → Clawd: alert bounce
+PreCompact       → RUNNING        (context compaction) → Clawd: sweeping
+WorktreeCreate   → RUNNING        (worktree setup)    → Clawd: carrying box
+Stop             → IDLE           (loop ended)        → Clawd: celebration → sleep (60s)
 ```
 
 ### Permission Flow
@@ -143,7 +151,7 @@ Sources/
     │   └── SettingsConfigurator.swift     # Auto-configures Claude Code hooks
     ├── Theme/
     │   ├── RetroTheme.swift              # Colors, fonts, view modifiers
-    │   ├── ClawdView.swift               # Pixel art Clawd mascot
+    │   ├── ClawdView.swift               # Pixel art Clawd mascot + animations + particle system
     │   ├── CharacterScatterView.swift    # ASCII scatter background
     │   ├── DotWaveView.swift             # Sine wave dot animation
     │   └── GlitchTextView.swift          # Character-by-character glitch text
