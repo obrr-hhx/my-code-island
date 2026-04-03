@@ -20,6 +20,18 @@ final class ClickThroughPanel: NSPanel {
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    required init(rootView: Content) {
+        super.init(rootView: rootView)
+        // Prevent NSHostingView from auto-resizing the window, which causes
+        // recursive layout crashes in borderless panels.
+        if #available(macOS 13.0, *) {
+            self.sizingOptions = []
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
     /// Recursively set acceptsFirstMouse on all subviews.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

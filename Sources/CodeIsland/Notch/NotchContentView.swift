@@ -16,10 +16,7 @@ struct NotchContentView: View {
             }
         }
         .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                appState.isExpanded.toggle()
-                panelController.setExpanded(appState.isExpanded)
-            }
+            appState.isExpanded.toggle()
         }
         .onChange(of: appState.isExpanded) { _, newValue in
             panelController.setExpanded(newValue)

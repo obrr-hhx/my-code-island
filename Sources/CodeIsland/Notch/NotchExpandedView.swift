@@ -9,6 +9,7 @@ struct NotchExpandedView: View {
 
     private let notchHeight: CGFloat = 32
     @State private var showIdleSessions = false
+    @State private var showSettings = false
 
     private var runningSessions: [TrackedSession] {
         appState.sessions.filter { $0.status != .idle }
@@ -37,41 +38,49 @@ struct NotchExpandedView: View {
                 // Pixel divider
                 pixelDivider
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 8) {
-                        // Permission prompts (urgent, shown first)
-                        ForEach(appState.pendingPermissions) { request in
-                            PermissionPromptView(request: request, appState: appState)
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-
-                        // AskUserQuestion prompts
-                        ForEach(appState.pendingQuestions) { question in
-                            UserQuestionView(question: question, appState: appState)
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-
-                        // Running sessions (always visible)
-                        ForEach(runningSessions) { session in
-                            SessionCardView(session: session)
-                        }
-
-                        // Idle sessions (collapsed)
-                        if !idleSessions.isEmpty {
-                            idleSessionsSection
-                        }
-
-                        if appState.sessions.isEmpty && appState.pendingPermissions.isEmpty && appState.pendingQuestions.isEmpty {
-                            emptyState
+                if showSettings {
+                    SettingsView(appState: appState) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSettings = false
                         }
                     }
-                    .padding(10)
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 8) {
+                            // Permission prompts (urgent, shown first)
+                            ForEach(appState.pendingPermissions) { request in
+                                PermissionPromptView(request: request, appState: appState)
+                                    .transition(.asymmetric(
+                                        insertion: .move(edge: .top).combined(with: .opacity),
+                                        removal: .opacity
+                                    ))
+                            }
+
+                            // AskUserQuestion prompts
+                            ForEach(appState.pendingQuestions) { question in
+                                UserQuestionView(question: question, appState: appState)
+                                    .transition(.asymmetric(
+                                        insertion: .move(edge: .top).combined(with: .opacity),
+                                        removal: .opacity
+                                    ))
+                            }
+
+                            // Running sessions (always visible)
+                            ForEach(runningSessions) { session in
+                                SessionCardView(session: session)
+                            }
+
+                            // Idle sessions (collapsed)
+                            if !idleSessions.isEmpty {
+                                idleSessionsSection
+                            }
+
+                            if appState.sessions.isEmpty && appState.pendingPermissions.isEmpty && appState.pendingQuestions.isEmpty {
+                                emptyState
+                            }
+                        }
+                        .padding(10)
+                    }
                 }
             }
         }
@@ -129,6 +138,24 @@ struct NotchExpandedView: View {
                             .fill(modeColor.opacity(0.12))
                     )
                     .pixelBorder(color: modeColor.opacity(0.3), cornerRadius: 3)
+            }
+            .buttonStyle(.plain)
+
+            // Settings button
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showSettings.toggle()
+                }
+            } label: {
+                Text("⚙")
+                    .font(RetroTheme.pixelFont(size: 10, weight: .bold))
+                    .foregroundStyle(showSettings ? RetroTheme.cyan : RetroTheme.textSecondary)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(showSettings ? RetroTheme.cyan.opacity(0.12) : RetroTheme.cardBg)
+                    )
+                    .pixelBorder(color: showSettings ? RetroTheme.cyan.opacity(0.3) : RetroTheme.border, cornerRadius: 3)
             }
             .buttonStyle(.plain)
 
