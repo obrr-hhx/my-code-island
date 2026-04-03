@@ -100,7 +100,7 @@ struct NotchExpandedView: View {
     private var headerBar: some View {
         HStack(spacing: 6) {
             // Clawd mascot icon
-            ClawdView(pixelSize: 2, pose: .default_, animated: true)
+            ClawdView(pixelSize: 2, pose: .default_, behavior: appState.clawdBehavior, animated: true)
                 .frame(width: 26, height: 22)
 
             GlitchTextView(

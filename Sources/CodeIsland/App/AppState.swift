@@ -8,6 +8,20 @@ enum PermissionMode: String, CaseIterable {
     case manual = "Manual"
 }
 
+/// Drives Clawd animation selection — richer than SessionStatus.
+enum ClawdBehavior: Equatable {
+    case idle
+    case sleeping
+    case thinking
+    case toolUse
+    case error
+    case celebrating
+    case sweeping
+    case carrying
+    case juggling
+    case conducting
+}
+
 /// Central state management for the entire app.
 ///
 /// Session status follows Claude Code's query loop lifecycle:
@@ -26,8 +40,11 @@ final class AppState {
     var recentEvents: [HookEvent] = []
     var isExpanded: Bool = false
     var permissionMode: PermissionMode = .observe
+    var clawdBehavior: ClawdBehavior = .idle
 
     private let maxRecentEvents = 50
+    private var sleepTimer: Timer?
+    private var behaviorResetTimer: Timer?
 
     // MARK: - Event Handling
 
@@ -40,18 +57,23 @@ final class AppState {
             recentEvents.removeLast()
         }
 
+        // Cancel sleep timer on any activity
+        cancelSleepTimer()
+
         switch event.eventName {
 
         // === Loop start ===
         case "UserPromptSubmit":
             session.status = .running(nil)
             session.lastActivity = Date()
+            setBehavior(.thinking)
             replyHandler(BridgeResponse.ack())
 
         // === Loop events (keep running) ===
         case "PreToolUse":
             session.status = .running(event.toolName)
             session.lastActivity = Date()
+            setBehavior(.toolUse)
 
             // Intercept AskUserQuestion — show options in Island UI
             if event.toolName == "AskUserQuestion" {
@@ -67,21 +89,31 @@ final class AppState {
             replyHandler(BridgeResponse.ack())
 
         case "PostToolUse":
-            // Tool done, but loop continues — stay running, clear tool name
-            session.status = .running(nil)
-            session.lastActivity = Date()
+            // Check for error in tool result
+            if hasToolError(event.payload.tool_result) {
+                session.status = .running(nil)
+                session.lastActivity = Date()
+                setBehavior(.error, autoResetAfter: 3.0)
+                ChiptuneEngine.shared.playError()
+            } else {
+                session.status = .running(nil)
+                session.lastActivity = Date()
+                setBehavior(.toolUse)
+            }
             replyHandler(BridgeResponse.ack())
 
         case "SubagentStart":
-            // Background agent launched — still running
             session.status = .running(nil)
             session.lastActivity = Date()
+            session.activeSubagentCount += 1
+            updateSubagentBehavior()
             replyHandler(BridgeResponse.ack())
 
         case "SubagentStop":
-            // Background agent done — loop may still be running
             session.status = .running(nil)
             session.lastActivity = Date()
+            session.activeSubagentCount = max(0, session.activeSubagentCount - 1)
+            updateSubagentBehavior()
             replyHandler(BridgeResponse.ack())
 
         // === Permission gate (blocks loop) ===
@@ -94,9 +126,25 @@ final class AppState {
         case "Stop":
             session.status = .idle
             session.lastActivity = Date()
+            session.activeSubagentCount = 0
+            setBehavior(.celebrating, autoResetAfter: 2.0)
+            ChiptuneEngine.shared.playCelebration()
             replyHandler(BridgeResponse.ack())
 
-        // === Other events (don't change status) ===
+        // === Context compaction ===
+        case "PreCompact":
+            session.lastActivity = Date()
+            setBehavior(.sweeping, autoResetAfter: 3.0)
+            ChiptuneEngine.shared.playSweep()
+            replyHandler(BridgeResponse.ack())
+
+        // === Worktree creation ===
+        case "WorktreeCreate":
+            session.lastActivity = Date()
+            setBehavior(.carrying, autoResetAfter: 3.0)
+            replyHandler(BridgeResponse.ack())
+
+        // === Other events ===
         case "Notification":
             ChiptuneEngine.shared.playNotification()
             replyHandler(BridgeResponse.ack())
@@ -190,19 +238,45 @@ final class AppState {
 
         if let existing = sessions.first(where: { $0.session.sessionId == sessionId }) {
             existing.isAlive = true
+            // Back-fill PID from disk session file if we don't have one
+            if existing.pid == 0 {
+                existing.session = existing.session.withPID(Self.readPIDFromDisk(sessionId: sessionId))
+            }
             return existing
         }
 
         let cwd = event.payload.cwd ?? "~"
-        let session = ClaudeSession(pid: 0, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000)
+        let pid = Self.readPIDFromDisk(sessionId: sessionId)
+        let session = ClaudeSession(pid: pid, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000)
         let tracked = TrackedSession(session: session)
         sessions.append(tracked)
         return tracked
     }
 
+    /// Scan ~/.claude/sessions/ to find the PID for a given session UUID.
+    /// Files are named by PID (e.g. 48308.json), content contains sessionId.
+    private static func readPIDFromDisk(sessionId: String) -> Int {
+        let dir = CodeIslandConstants.claudeSessionsDir
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return 0 }
+        for file in files where file.hasSuffix(".json") {
+            let path = (dir as NSString).appendingPathComponent(file)
+            guard let data = fm.contents(atPath: path),
+                  let session = try? JSONDecoder().decode(ClaudeSession.self, from: data),
+                  session.sessionId == sessionId else { continue }
+            return session.pid
+        }
+        return 0
+    }
+
     func refreshSessions(_ diskSessions: [ClaudeSession]) {
         for ds in diskSessions {
-            if !sessions.contains(where: { $0.session.sessionId == ds.sessionId }) {
+            if let existing = sessions.first(where: { $0.session.sessionId == ds.sessionId }) {
+                // Update PID from disk if hook-created session had pid=0
+                if existing.pid == 0 && ds.pid > 0 {
+                    existing.session = ds
+                }
+            } else {
                 sessions.append(TrackedSession(session: ds))
             }
         }
@@ -215,6 +289,78 @@ final class AppState {
         }
 
         for session in sessions { session.checkAlive() }
+    }
+
+    // MARK: - Clawd Behavior
+
+    /// Set behavior, optionally auto-resetting to idle after a duration.
+    private func setBehavior(_ behavior: ClawdBehavior, autoResetAfter: TimeInterval? = nil) {
+        behaviorResetTimer?.invalidate()
+        behaviorResetTimer = nil
+        clawdBehavior = behavior
+
+        if let delay = autoResetAfter {
+            behaviorResetTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.clawdBehavior = .idle
+                    self.startSleepTimer()
+                }
+            }
+        } else if behavior == .idle {
+            startSleepTimer()
+        }
+    }
+
+    /// Update behavior based on total active subagent count across sessions.
+    private func updateSubagentBehavior() {
+        let totalSubagents = sessions.reduce(0) { $0 + $1.activeSubagentCount }
+        if totalSubagents >= 2 {
+            setBehavior(.conducting)
+        } else if totalSubagents == 1 {
+            setBehavior(.juggling)
+        } else {
+            setBehavior(.thinking)
+        }
+    }
+
+    /// Check if tool_result indicates an error.
+    private func hasToolError(_ result: JSONValue?) -> Bool {
+        guard let result else { return false }
+        let text: String
+        switch result {
+        case .string(let s): text = s
+        case .object(let dict):
+            if case .bool(let isError) = dict["is_error"], isError { return true }
+            text = dict.values.compactMap { if case .string(let s) = $0 { return s } else { return nil } }.joined()
+        default: return false
+        }
+        let lower = text.lowercased()
+        return lower.contains("error") || lower.contains("failed") || lower.contains("permission denied")
+    }
+
+    // MARK: - Sleep Timer
+
+    private func startSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.clawdBehavior == .idle {
+                    self.clawdBehavior = .sleeping
+                    ChiptuneEngine.shared.playSleepChime()
+                }
+            }
+        }
+    }
+
+    private func cancelSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        // Wake up if sleeping
+        if clawdBehavior == .sleeping {
+            ChiptuneEngine.shared.playWakeUp()
+        }
     }
 
     // MARK: - Notifications

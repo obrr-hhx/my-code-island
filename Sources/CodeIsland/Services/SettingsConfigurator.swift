@@ -13,7 +13,9 @@ enum SettingsConfigurator {
         "SubagentStart",
         "Notification",
         "UserPromptSubmit",
-        "PermissionRequest"
+        "PermissionRequest",
+        "PreCompact",
+        "WorktreeCreate",
     ]
 
     /// Marker to identify our hooks in the config.
