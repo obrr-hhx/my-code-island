@@ -87,6 +87,10 @@ final class TrackedSession: Identifiable {
     var activeSubagentCount: Int = 0
     /// Cached terminal app name (e.g. "iTerm", "Term", "Ghostty"). Resolved once.
     var terminalName: String = "?"
+    /// TTY of the session process (e.g. "/dev/ttys005"). Set during terminal detection.
+    var tty: String?
+    /// If session runs inside tmux, the pane ID (e.g. "%5"). Nil if not in tmux.
+    var tmuxPaneId: String?
     private var terminalResolved = false
 
     var id: String { session.id }
@@ -113,7 +117,10 @@ final class TrackedSession: Identifiable {
     func resolveTerminalIfNeeded() {
         guard !terminalResolved, pid > 0 else { return }
         terminalResolved = true
-        terminalName = Self.detectTerminal(forPid: Int32(pid))
+        let result = Self.detectTerminal(forPid: Int32(pid))
+        terminalName = result.label
+        tty = result.tty
+        tmuxPaneId = result.tmuxPaneId
     }
 
     private static let knownTerminals: [(String, String)] = [
@@ -128,28 +135,52 @@ final class TrackedSession: Identifiable {
         ("com.codeium.windsurf", "Winds"),
     ]
 
-    private static func detectTerminal(forPid pid: Int32) -> String {
+    private struct TerminalInfo {
+        var label: String = "?"
+        var tty: String?
+        var tmuxPaneId: String?
+    }
+
+    private static func detectTerminal(forPid pid: Int32) -> TerminalInfo {
+        var info = TerminalInfo()
+
+        // Resolve TTY for this PID
+        let rawTTY = shell("ps -o tty= -p \(pid)").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rawTTY.isEmpty, rawTTY != "??" {
+            info.tty = rawTTY.hasPrefix("/dev/") ? rawTTY : "/dev/\(rawTTY)"
+        }
+
         // Try direct PID chain first
-        if let label = findTerminalByPIDChain(pid) { return label }
+        if let label = findTerminalByPIDChain(pid) {
+            info.label = label
+            return info
+        }
 
-        // Try via tmux: PID → TTY → tmux client → PID chain
-        let tty = shell("ps -o tty= -p \(pid)").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tty.isEmpty, tty != "??" else { return "?" }
-        let devTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
+        // Try via tmux: TTY → tmux pane → client PID chain
+        guard let devTTY = info.tty else { return info }
 
-        // Check if this TTY belongs to a tmux pane
-        let panes = shell("tmux list-panes -a -F '#{pane_tty}'")
-        let isTmux = panes.split(separator: "\n").contains { String($0) == devTTY }
-        guard isTmux else { return "?" }
+        // Check if this TTY belongs to a tmux pane and get the pane ID
+        let panes = shell("tmux list-panes -a -F '#{pane_tty} #{pane_id}'")
+        for line in panes.split(separator: "\n") {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            guard parts.count == 2, String(parts[0]) == devTTY else { continue }
+            info.tmuxPaneId = String(parts[1])
+            break
+        }
+
+        guard info.tmuxPaneId != nil else { return info }
 
         // Walk tmux client PIDs to find the terminal
         let clients = shell("tmux list-clients -F '#{client_pid}'")
         for line in clients.split(separator: "\n") {
             let clientPid = Int32(line.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
             guard clientPid > 0 else { continue }
-            if let label = findTerminalByPIDChain(clientPid) { return label }
+            if let label = findTerminalByPIDChain(clientPid) {
+                info.label = label
+                return info
+            }
         }
-        return "?"
+        return info
     }
 
     private static func findTerminalByPIDChain(_ startPid: Int32) -> String? {

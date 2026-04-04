@@ -370,7 +370,7 @@ final class VoiceInputService {
                 activateFrontmostTerminal()
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                TerminalTyper.typeAndSend(transcript)
+                TerminalTyper.typeAndSend(transcript, session: self.targetSession)
             }
         } else {
             print("[VoiceInput] No transcript received")
