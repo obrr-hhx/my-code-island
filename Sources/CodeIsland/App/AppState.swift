@@ -64,6 +64,12 @@ final class AppState {
         // Cancel sleep timer on any activity
         cancelSleepTimer()
 
+        // If this session has pending permissions/questions but a non-permission event arrives,
+        // it means the user already handled it in the terminal — clear stale entries.
+        if event.eventName != "PermissionRequest" && event.eventName != "PreToolUse" {
+            clearStaleRequests(forSessionId: event.payload.session_id)
+        }
+
         switch event.eventName {
 
         // === Loop start ===
@@ -194,6 +200,24 @@ final class AppState {
         if pendingPermissions.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 if self?.pendingPermissions.isEmpty == true {
+                    self?.isExpanded = false
+                }
+            }
+        }
+    }
+
+    // MARK: - Stale Request Cleanup
+
+    /// Clear pending permissions/questions for a session that was already handled in the terminal.
+    private func clearStaleRequests(forSessionId sessionId: String?) {
+        guard let sessionId else { return }
+        let hadPermissions = !pendingPermissions.isEmpty
+        pendingPermissions.removeAll { $0.event.sessionId == sessionId }
+        pendingQuestions.removeAll { $0.event.sessionId == sessionId }
+
+        if hadPermissions && pendingPermissions.isEmpty && pendingQuestions.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                if self?.pendingPermissions.isEmpty == true && self?.pendingQuestions.isEmpty == true {
                     self?.isExpanded = false
                 }
             }

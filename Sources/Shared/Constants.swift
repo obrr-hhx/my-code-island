@@ -40,7 +40,8 @@ public enum CodeIslandConstants {
     public static let bundleIdentifier = "com.codeisland.app"
 
     /// Default timeout for permission requests (seconds)
-    public static let permissionTimeout: TimeInterval = 55
+    /// Claude Code's own timeout is 10 minutes, so we use slightly less.
+    public static let permissionTimeout: TimeInterval = 570
 
     /// Session poll interval (seconds)
     public static let sessionPollInterval: TimeInterval = 5

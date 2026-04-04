@@ -134,12 +134,10 @@ final class SocketServer {
                 }
             }
 
-            let timeout = DispatchTime.now() + CodeIslandConstants.permissionTimeout
-            let waitResult = semaphore.wait(timeout: timeout)
-            print("[SocketServer] semaphore result: \(waitResult == .timedOut ? "TIMEOUT" : "signaled"), response decision=\(box.response.decision ?? "nil")")
-            if waitResult == .timedOut {
-                box.response = BridgeResponse.ack()
-            }
+            // Wait indefinitely — Claude Code has its own hook timeout (10 min).
+            // If the user doesn't respond, Claude Code will kill the bridge process.
+            semaphore.wait()
+            print("[SocketServer] semaphore signaled, response decision=\(box.response.decision ?? "nil")")
 
             let writeOk = SocketProtocol.writeMessage(fd: fd, value: box.response)
             print("[SocketServer] wrote response back to bridge: \(writeOk)")
