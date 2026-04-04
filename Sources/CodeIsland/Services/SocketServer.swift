@@ -123,7 +123,6 @@ final class SocketServer {
 
             DispatchQueue.main.async {
                 let handler = SocketServer.shared.onEvent
-                print("[SocketServer] handler is \(handler == nil ? "nil" : "set")")
                 handler?(event, source) { decision in
                     print("[SocketServer] replyHandler called: decision=\(decision.decision ?? "nil")")
                     box.response = decision
@@ -134,10 +133,14 @@ final class SocketServer {
                 }
             }
 
-            // Wait indefinitely — Claude Code has its own hook timeout (10 min).
-            // If the user doesn't respond, Claude Code will kill the bridge process.
-            semaphore.wait()
-            print("[SocketServer] semaphore signaled, response decision=\(box.response.decision ?? "nil")")
+            // Wait for user response. Safety timeout prevents thread leak if bridge hangs.
+            let waitResult = semaphore.wait(timeout: .now() + CodeIslandConstants.permissionTimeout)
+            if waitResult == .timedOut {
+                print("[SocketServer] Safety timeout (\(Int(CodeIslandConstants.permissionTimeout))s)")
+                box.response = BridgeResponse.ack()
+            } else {
+                print("[SocketServer] Response: decision=\(box.response.decision ?? "nil")")
+            }
 
             let writeOk = SocketProtocol.writeMessage(fd: fd, value: box.response)
             print("[SocketServer] wrote response back to bridge: \(writeOk)")

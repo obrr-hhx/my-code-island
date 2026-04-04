@@ -64,9 +64,13 @@ final class AppState {
         // Cancel sleep timer on any activity
         cancelSleepTimer()
 
-        // If this session has pending permissions/questions but a non-permission event arrives,
-        // it means the user already handled it in the terminal — clear stale entries.
-        if event.eventName != "PermissionRequest" && event.eventName != "PreToolUse" {
+        // If this session was waiting for permission but we got a non-permission event,
+        // it means the user approved in the terminal — the tool already ran.
+        // Only clear if the session was actually in waitingPermission state.
+        if session.status == .waitingPermission
+            && event.eventName != "PermissionRequest"
+            && event.eventName != "PreToolUse" {
+            print("[AppState] Session \(session.projectName) was waiting permission but got \(event.eventName) — clearing stale requests")
             clearStaleRequests(forSessionId: event.payload.session_id)
         }
 
@@ -157,6 +161,11 @@ final class AppState {
         // === Other events ===
         case "Notification":
             ChiptuneEngine.shared.playNotification()
+            replyHandler(BridgeResponse.ack())
+
+        case "_timeout":
+            // Socket timeout — clean up stale permissions for this session
+            clearStaleRequests(forSessionId: event.payload.session_id)
             replyHandler(BridgeResponse.ack())
 
         default:
