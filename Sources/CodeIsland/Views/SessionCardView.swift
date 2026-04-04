@@ -32,6 +32,17 @@ struct SessionCardView: View {
                                 .fill((session.session.agentType == .codex ? RetroTheme.codexGreen : RetroTheme.cyan).opacity(0.15))
                         )
 
+                    // Terminal badge
+                    Text(session.terminalName)
+                        .font(RetroTheme.pixelFont(size: 6, weight: .bold))
+                        .foregroundStyle(RetroTheme.codexGreen)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(RetroTheme.codexGreen.opacity(0.15))
+                        )
+
                     Text(session.projectName.uppercased())
                         .font(RetroTheme.pixelFont(size: 11, weight: .bold))
                         .foregroundStyle(RetroTheme.textPrimary)
@@ -138,4 +149,5 @@ struct SessionCardView: View {
         case .waitingPermission: return "AWAITING APPROVAL"
         }
     }
+
 }

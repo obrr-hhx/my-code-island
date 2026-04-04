@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Represents a Claude Code session discovered from ~/.claude/sessions/.
@@ -84,6 +85,9 @@ final class TrackedSession: Identifiable {
     var lastActivity: Date = Date()
     var isAlive: Bool = true
     var activeSubagentCount: Int = 0
+    /// Cached terminal app name (e.g. "iTerm", "Term", "Ghostty"). Resolved once.
+    var terminalName: String = "?"
+    private var terminalResolved = false
 
     var id: String { session.id }
     var projectName: String { session.projectName }
@@ -103,5 +107,89 @@ final class TrackedSession: Identifiable {
         // pid=0 means we never resolved the real PID — treat as dead
         guard pid > 0 else { isAlive = false; return }
         isAlive = kill(Int32(pid), 0) == 0
+    }
+
+    /// Resolve terminal name once (called from SessionWatcher on background-safe context).
+    func resolveTerminalIfNeeded() {
+        guard !terminalResolved, pid > 0 else { return }
+        terminalResolved = true
+        terminalName = Self.detectTerminal(forPid: Int32(pid))
+    }
+
+    private static let knownTerminals: [(String, String)] = [
+        ("com.googlecode.iterm2", "iTerm"),
+        ("com.apple.Terminal", "Term"),
+        ("com.mitchellh.ghostty", "Ghostty"),
+        ("dev.warp.Warp-Stable", "Warp"),
+        ("net.kovidgoyal.kitty", "Kitty"),
+        ("org.alacritty", "Alac"),
+        ("com.microsoft.VSCode", "VSC"),
+        ("com.todesktop.230313mzl4w4u92", "Cursor"),
+        ("com.codeium.windsurf", "Winds"),
+    ]
+
+    private static func detectTerminal(forPid pid: Int32) -> String {
+        // Try direct PID chain first
+        if let label = findTerminalByPIDChain(pid) { return label }
+
+        // Try via tmux: PID → TTY → tmux client → PID chain
+        let tty = shell("ps -o tty= -p \(pid)").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tty.isEmpty, tty != "??" else { return "?" }
+        let devTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
+
+        // Check if this TTY belongs to a tmux pane
+        let panes = shell("tmux list-panes -a -F '#{pane_tty}'")
+        let isTmux = panes.split(separator: "\n").contains { String($0) == devTTY }
+        guard isTmux else { return "?" }
+
+        // Walk tmux client PIDs to find the terminal
+        let clients = shell("tmux list-clients -F '#{client_pid}'")
+        for line in clients.split(separator: "\n") {
+            let clientPid = Int32(line.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            guard clientPid > 0 else { continue }
+            if let label = findTerminalByPIDChain(clientPid) { return label }
+        }
+        return "?"
+    }
+
+    private static func findTerminalByPIDChain(_ startPid: Int32) -> String? {
+        let appByPid = Dictionary(
+            NSWorkspace.shared.runningApplications.compactMap { app -> (pid_t, NSRunningApplication)? in
+                guard app.processIdentifier > 0 else { return nil }
+                return (app.processIdentifier, app)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var current = startPid
+        var visited = Set<Int32>()
+        for _ in 0..<20 {
+            guard current > 1, !visited.contains(current) else { break }
+            visited.insert(current)
+            if let app = appByPid[current], let bid = app.bundleIdentifier {
+                for (bundleId, label) in knownTerminals where bundleId == bid {
+                    return label
+                }
+            }
+            var info = kinfo_proc()
+            var size = MemoryLayout<kinfo_proc>.size
+            var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, current]
+            guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { break }
+            current = info.kp_eproc.e_ppid
+        }
+        return nil
+    }
+
+    private static func shell(_ command: String) -> String {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        } catch { return "" }
     }
 }

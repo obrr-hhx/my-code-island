@@ -33,6 +33,11 @@ final class SessionWatcher {
         allSessions.append(contentsOf: scanClaude())
         allSessions.append(contentsOf: scanCodex())
         appState.refreshSessions(allSessions)
+
+        // Resolve terminal names for sessions that haven't been resolved yet
+        for session in appState.sessions {
+            session.resolveTerminalIfNeeded()
+        }
     }
 
     // MARK: - Claude Sessions
