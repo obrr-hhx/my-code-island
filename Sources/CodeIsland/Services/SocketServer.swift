@@ -13,8 +13,9 @@ final class SocketServer {
 
     /// Callback invoked on the main thread when an event arrives.
     /// Set by HookEventRouter. Accessed from the accept thread via `shared`.
+    /// Callback: (payload, source, replyHandler)
     @MainActor
-    var onEvent: (@Sendable (HookEventPayload, @escaping @Sendable (BridgeResponse) -> Void) -> Void)?
+    var onEvent: (@Sendable (HookEventPayload, String?, @escaping @Sendable (BridgeResponse) -> Void) -> Void)?
 
     @MainActor
     private init() {}
@@ -111,6 +112,7 @@ final class SocketServer {
         }
 
         let event = message.event
+        let source = message.source
 
         // Events that may need to block for a user decision
         let blockingEvents = ["PreToolUse", "PermissionRequest"]
@@ -122,7 +124,7 @@ final class SocketServer {
             DispatchQueue.main.async {
                 let handler = SocketServer.shared.onEvent
                 print("[SocketServer] handler is \(handler == nil ? "nil" : "set")")
-                handler?(event) { decision in
+                handler?(event, source) { decision in
                     print("[SocketServer] replyHandler called: decision=\(decision.decision ?? "nil")")
                     box.response = decision
                     semaphore.signal()
@@ -145,7 +147,7 @@ final class SocketServer {
             // Fire-and-forget: fetch CURRENT handler, send ACK immediately
             DispatchQueue.main.async {
                 let handler = SocketServer.shared.onEvent
-                handler?(event) { _ in }
+                handler?(event, source) { _ in }
             }
             _ = SocketProtocol.writeMessage(fd: fd, value: BridgeResponse.ack())
         }

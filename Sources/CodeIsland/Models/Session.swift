@@ -8,8 +8,31 @@ struct ClaudeSession: Identifiable, Codable {
     let startedAt: TimeInterval  // milliseconds since epoch
     var kind: String?
     var entrypoint: String?
+    var agentType: AgentType
 
     var id: String { sessionId }
+
+    init(pid: Int, sessionId: String, cwd: String, startedAt: TimeInterval, kind: String? = nil, entrypoint: String? = nil, agentType: AgentType = .claude) {
+        self.pid = pid
+        self.sessionId = sessionId
+        self.cwd = cwd
+        self.startedAt = startedAt
+        self.kind = kind
+        self.entrypoint = entrypoint
+        self.agentType = agentType
+    }
+
+    /// Custom decoding to default agentType when missing from JSON.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pid = try container.decode(Int.self, forKey: .pid)
+        sessionId = try container.decode(String.self, forKey: .sessionId)
+        cwd = try container.decode(String.self, forKey: .cwd)
+        startedAt = try container.decode(TimeInterval.self, forKey: .startedAt)
+        kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        entrypoint = try container.decodeIfPresent(String.self, forKey: .entrypoint)
+        agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType) ?? .claude
+    }
 
     /// Return a copy with an updated PID (if the new PID is valid).
     func withPID(_ newPid: Int) -> ClaudeSession {

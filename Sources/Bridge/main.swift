@@ -67,7 +67,14 @@ guard fd >= 0 else {
 
 defer { close(fd) }
 
-let message = BridgeMessage(event: event)
+// Parse --source flag (e.g., --source codex)
+var source: String? = nil
+if let idx = CommandLine.arguments.firstIndex(of: "--source"),
+   idx + 1 < CommandLine.arguments.count {
+    source = CommandLine.arguments[idx + 1]
+}
+
+let message = BridgeMessage(event: event, source: source)
 guard SocketProtocol.writeMessage(fd: fd, value: message) else {
     log("failed to write message to socket, exiting")
     exit(0)

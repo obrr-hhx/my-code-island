@@ -87,10 +87,12 @@ public enum SocketProtocol {
 public struct BridgeMessage: Codable, Sendable {
     public let type: String  // "hook_event"
     public let event: HookEventPayload
+    public let source: String?  // "claude" or "codex"
 
-    public init(event: HookEventPayload) {
+    public init(event: HookEventPayload, source: String? = nil) {
         self.type = "hook_event"
         self.event = event
+        self.source = source
     }
 }
 

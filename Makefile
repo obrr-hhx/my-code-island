@@ -35,6 +35,8 @@ $(BUILD_DIR)/$(APP_NAME): $(APP_SOURCES) $(SHARED_SOURCES)
 	$(SWIFTC) $(SWIFT_FLAGS) \
 		-framework AppKit \
 		-framework SwiftUI \
+		-framework AVFoundation \
+		-framework ApplicationServices \
 		$(SHARED_SOURCES) $(APP_SOURCES) \
 		-o $(BUILD_DIR)/$(APP_NAME)
 	@echo "✓ Built $(APP_NAME)"

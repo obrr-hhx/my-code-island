@@ -45,6 +45,11 @@ struct NotchExpandedView: View {
                         }
                     }
                 } else {
+                    // Voice listening bar
+                    if VoiceInputService.shared.isListening {
+                        voiceListeningBar
+                    }
+
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 8) {
                             // Permission prompts (urgent, shown first)
@@ -243,6 +248,41 @@ struct NotchExpandedView: View {
         }
     }
 
+    private var voiceListeningBar: some View {
+        HStack(spacing: 8) {
+            // Pulsing mic indicator
+            Circle()
+                .fill(RetroTheme.claudeOrange)
+                .frame(width: 8, height: 8)
+                .shadow(color: RetroTheme.claudeOrange.opacity(0.8), radius: 4)
+
+            Text(VoiceInputService.shared.currentTranscript.isEmpty ? "LISTENING..." : VoiceInputService.shared.currentTranscript)
+                .font(RetroTheme.pixelFont(size: 9))
+                .foregroundStyle(RetroTheme.claudeOrange)
+                .lineLimit(2)
+
+            Spacer()
+
+            Button {
+                VoiceInputService.shared.stopListening()
+            } label: {
+                Text("■")
+                    .font(RetroTheme.pixelFont(size: 9, weight: .bold))
+                    .foregroundStyle(RetroTheme.claudeOrange)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(RetroTheme.claudeOrange.opacity(0.1))
+                    )
+                    .pixelBorder(color: RetroTheme.claudeOrange.opacity(0.3), cornerRadius: 3)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(RetroTheme.claudeOrange.opacity(0.05))
+    }
+
     private var emptyState: some View {
         VStack(spacing: 10) {
             Text("░░░░░░░░")
@@ -256,7 +296,7 @@ struct NotchExpandedView: View {
                 glitchColor: RetroTheme.cyan.opacity(0.5)
             )
 
-            Text("start claude code to see activity")
+            Text("start claude code or codex to see activity")
                 .font(RetroTheme.pixelFont(size: 9))
                 .foregroundStyle(RetroTheme.textMuted.opacity(0.5))
         }

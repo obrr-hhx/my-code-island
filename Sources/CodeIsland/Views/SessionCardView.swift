@@ -20,10 +20,23 @@ struct SessionCardView: View {
 
             // Project info
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.projectName.uppercased())
-                    .font(RetroTheme.pixelFont(size: 11, weight: .bold))
-                    .foregroundStyle(RetroTheme.textPrimary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    // Agent type badge
+                    Text(session.session.agentType == .codex ? "CX" : "CC")
+                        .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                        .foregroundStyle(session.session.agentType == .codex ? RetroTheme.codexGreen : RetroTheme.cyan)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill((session.session.agentType == .codex ? RetroTheme.codexGreen : RetroTheme.cyan).opacity(0.15))
+                        )
+
+                    Text(session.projectName.uppercased())
+                        .font(RetroTheme.pixelFont(size: 11, weight: .bold))
+                        .foregroundStyle(RetroTheme.textPrimary)
+                        .lineLimit(1)
+                }
 
                 HStack(spacing: 4) {
                     // Status pixel indicator
@@ -60,6 +73,26 @@ struct SessionCardView: View {
                     .fill(RetroTheme.background.opacity(0.5))
             )
             .pixelBorder(color: RetroTheme.border.opacity(0.3), cornerRadius: 3)
+
+            // Mic button for voice input
+            Button {
+                TerminalJumper.jump(to: session)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    VoiceInputService.shared.targetSession = session
+                    VoiceInputService.shared.toggleListening()
+                }
+            } label: {
+                Text(VoiceInputService.shared.isListening && VoiceInputService.shared.targetSession?.id == session.id ? "◉" : "◎")
+                    .font(RetroTheme.pixelFont(size: 11, weight: .bold))
+                    .foregroundStyle(VoiceInputService.shared.isListening && VoiceInputService.shared.targetSession?.id == session.id ? RetroTheme.claudeOrange : RetroTheme.textMuted)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(RetroTheme.cardBg)
+                    )
+                    .pixelBorder(color: VoiceInputService.shared.isListening && VoiceInputService.shared.targetSession?.id == session.id ? RetroTheme.claudeOrange.opacity(0.3) : RetroTheme.border.opacity(0.3), cornerRadius: 3)
+            }
+            .buttonStyle(.plain)
 
             // Dead session indicator
             if !session.isAlive {

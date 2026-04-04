@@ -13,9 +13,9 @@ final class HookEventRouter {
     func start() {
         // Capture appState for the sendable closure
         let state = appState
-        SocketServer.shared.onEvent = { @Sendable payload, replyHandler in
+        SocketServer.shared.onEvent = { @Sendable payload, source, replyHandler in
             Task { @MainActor in
-                state.handleEvent(payload, replyHandler: replyHandler)
+                state.handleEvent(payload, source: source, replyHandler: replyHandler)
             }
         }
     }

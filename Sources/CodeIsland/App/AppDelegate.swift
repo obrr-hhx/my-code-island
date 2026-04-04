@@ -90,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionWatcher?.start()
 
         SettingsConfigurator.ensureHooksConfigured()
+        SettingsConfigurator.ensureCodexHooksConfigured()
 
         print("[CodeIsland] All services started")
     }

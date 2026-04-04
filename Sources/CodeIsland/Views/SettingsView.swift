@@ -6,6 +6,9 @@ struct SettingsView: View {
     let onDismiss: () -> Void
 
     @State private var soundEnabled = !ChiptuneEngine.shared.isMuted
+    @State private var appIdText = VoiceInputService.shared.loadKey(CodeIslandConstants.doubaoAppIdPath) ?? ""
+    @State private var accessTokenText = VoiceInputService.shared.loadKey(CodeIslandConstants.doubaoAccessTokenPath) ?? ""
+    @State private var apiKeySaved = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -85,42 +88,58 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
 
-            // Hooks
-            settingSection("HOOKS") {
+            // Claude Hooks
+            settingSection("CLAUDE HOOKS") {
                 HStack(spacing: 8) {
-                    Button {
+                    hookButton("INSTALL", color: RetroTheme.codexGreen) {
                         SettingsConfigurator.ensureHooksConfigured()
-                    } label: {
-                        Text("INSTALL")
-                            .font(RetroTheme.pixelFont(size: 8, weight: .bold))
-                            .foregroundStyle(RetroTheme.codexGreen)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(RetroTheme.codexGreen.opacity(0.1))
-                            )
-                            .pixelBorder(color: RetroTheme.codexGreen.opacity(0.3), cornerRadius: 3)
                     }
-                    .buttonStyle(.plain)
-
-                    Button {
+                    hookButton("REMOVE", color: RetroTheme.claudeOrange) {
                         SettingsConfigurator.removeHooks()
-                    } label: {
-                        Text("REMOVE")
-                            .font(RetroTheme.pixelFont(size: 8, weight: .bold))
-                            .foregroundStyle(RetroTheme.claudeOrange)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(RetroTheme.claudeOrange.opacity(0.1))
-                            )
-                            .pixelBorder(color: RetroTheme.claudeOrange.opacity(0.3), cornerRadius: 3)
                     }
-                    .buttonStyle(.plain)
-
                     Spacer()
+                }
+            }
+
+            // Codex Hooks
+            settingSection("CODEX HOOKS") {
+                HStack(spacing: 8) {
+                    hookButton("INSTALL", color: RetroTheme.codexGreen) {
+                        SettingsConfigurator.ensureCodexHooksConfigured()
+                    }
+                    hookButton("REMOVE", color: RetroTheme.claudeOrange) {
+                        SettingsConfigurator.removeCodexHooks()
+                    }
+                    Spacer()
+                }
+            }
+
+            // Voice Input — Doubao ASR
+            settingSection("VOICE INPUT (DOUBAO ASR)") {
+                VStack(alignment: .leading, spacing: 6) {
+                    keyField("APP ID", text: $appIdText)
+                    keyField("ACCESS TOKEN", text: $accessTokenText)
+                    HStack {
+                        Button {
+                            VoiceInputService.shared.saveKey(appIdText, to: CodeIslandConstants.doubaoAppIdPath)
+                            VoiceInputService.shared.saveKey(accessTokenText, to: CodeIslandConstants.doubaoAccessTokenPath)
+                            apiKeySaved = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { apiKeySaved = false }
+                        } label: {
+                            Text(apiKeySaved ? "SAVED" : "SAVE")
+                                .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                                .foregroundStyle(apiKeySaved ? RetroTheme.codexGreen : RetroTheme.cyan)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill((apiKeySaved ? RetroTheme.codexGreen : RetroTheme.cyan).opacity(0.1))
+                                )
+                                .pixelBorder(color: (apiKeySaved ? RetroTheme.codexGreen : RetroTheme.cyan).opacity(0.3), cornerRadius: 3)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
                 }
             }
 
@@ -157,6 +176,39 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func keyField(_ label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(RetroTheme.pixelFont(size: 7))
+                .foregroundStyle(RetroTheme.textMuted)
+            SecureField("...", text: text)
+                .font(RetroTheme.pixelFont(size: 9))
+                .textFieldStyle(.plain)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(RetroTheme.background.opacity(0.5))
+                )
+                .pixelBorder(color: RetroTheme.border.opacity(0.3), cornerRadius: 3)
+        }
+    }
+
+    private func hookButton(_ title: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color.opacity(0.1))
+                )
+                .pixelBorder(color: color.opacity(0.3), cornerRadius: 3)
+        }
+        .buttonStyle(.plain)
     }
 
     private func colorForMode(_ mode: PermissionMode) -> Color {

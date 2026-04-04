@@ -29,10 +29,19 @@ final class SessionWatcher {
     }
 
     private func scan() {
+        var allSessions: [ClaudeSession] = []
+        allSessions.append(contentsOf: scanClaude())
+        allSessions.append(contentsOf: scanCodex())
+        appState.refreshSessions(allSessions)
+    }
+
+    // MARK: - Claude Sessions
+
+    private func scanClaude() -> [ClaudeSession] {
         let sessionsDir = CodeIslandConstants.claudeSessionsDir
         let fm = FileManager.default
 
-        guard fm.fileExists(atPath: sessionsDir) else { return }
+        guard fm.fileExists(atPath: sessionsDir) else { return [] }
 
         do {
             let files = try fm.contentsOfDirectory(atPath: sessionsDir)
@@ -50,10 +59,96 @@ final class SessionWatcher {
                     sessions.append(session)
                 }
             }
-
-            appState.refreshSessions(sessions)
+            return sessions
         } catch {
-            // Directory read failed - ignore silently
+            return []
         }
+    }
+
+    // MARK: - Codex Sessions
+
+    /// Scan Codex session .jsonl files from today and yesterday.
+    private func scanCodex() -> [ClaudeSession] {
+        let baseDir = CodeIslandConstants.codexSessionsDir
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: baseDir) else { return [] }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd"
+        let today = formatter.string(from: Date())
+        let yesterday = formatter.string(from: Date().addingTimeInterval(-86400))
+
+        var sessions: [ClaudeSession] = []
+        for dateStr in [today, yesterday] {
+            let dayDir = (baseDir as NSString).appendingPathComponent(dateStr)
+            guard let files = try? fm.contentsOfDirectory(atPath: dayDir) else { continue }
+
+            for file in files where file.hasSuffix(".jsonl") {
+                let path = (dayDir as NSString).appendingPathComponent(file)
+                guard let handle = FileHandle(forReadingAtPath: path),
+                      let lineData = handle.readLine(),
+                      let meta = parseCodexSessionMeta(lineData) else {
+                    continue
+                }
+
+                // Check if this session has recent hook activity
+                // (Codex .jsonl files don't have PID in filename)
+                let hasRecentActivity = appState.sessions.contains {
+                    $0.session.sessionId == meta.id && $0.lastActivity.timeIntervalSinceNow > -60
+                }
+                if hasRecentActivity {
+                    let session = ClaudeSession(
+                        pid: 0,
+                        sessionId: meta.id,
+                        cwd: meta.cwd,
+                        startedAt: meta.timestamp,
+                        agentType: .codex
+                    )
+                    sessions.append(session)
+                }
+            }
+        }
+        return sessions
+    }
+
+    /// Parse the first line of a Codex .jsonl file for session metadata.
+    private func parseCodexSessionMeta(_ data: Data) -> (id: String, cwd: String, timestamp: TimeInterval)? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["type"] as? String == "session_meta",
+              let payload = json["payload"] as? [String: Any],
+              let id = payload["id"] as? String,
+              let cwd = payload["cwd"] as? String else {
+            return nil
+        }
+
+        // Parse ISO timestamp or use current time
+        var ts = Date().timeIntervalSince1970 * 1000
+        if let tsStr = payload["timestamp"] as? String {
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFormatter.date(from: tsStr) {
+                ts = date.timeIntervalSince1970 * 1000
+            }
+        }
+        return (id, cwd, ts)
+    }
+}
+
+/// FileHandle extension to read a single line.
+private extension FileHandle {
+    func readLine() -> Data? {
+        let chunkSize = 4096
+        var buffer = Data()
+        while true {
+            let chunk = readData(ofLength: chunkSize)
+            if chunk.isEmpty { break }
+            if let newlineIdx = chunk.firstIndex(of: UInt8(ascii: "\n")) {
+                buffer.append(chunk[chunk.startIndex..<newlineIdx])
+                return buffer
+            }
+            buffer.append(chunk)
+            if buffer.count > 65536 { return nil } // safety limit
+        }
+        return buffer.isEmpty ? nil : buffer
     }
 }

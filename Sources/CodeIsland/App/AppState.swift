@@ -48,7 +48,11 @@ final class AppState {
 
     // MARK: - Event Handling
 
-    func handleEvent(_ payload: HookEventPayload, replyHandler: @escaping (BridgeResponse) -> Void) {
+    /// Source string from the bridge, used to tag sessions with agent type.
+    private var lastEventSource: String?
+
+    func handleEvent(_ payload: HookEventPayload, source: String? = nil, replyHandler: @escaping (BridgeResponse) -> Void) {
+        lastEventSource = source
         let event = HookEvent(payload: payload)
         let session = findOrCreateSession(for: event)
 
@@ -228,9 +232,11 @@ final class AppState {
     // MARK: - Session Management
 
     private func findOrCreateSession(for event: HookEvent) -> TrackedSession {
+        let agentType: AgentType = (lastEventSource == "codex") ? .codex : .claude
+
         guard let sessionId = event.payload.session_id else {
             // No session ID — create a transient one
-            let session = ClaudeSession(pid: 0, sessionId: "unknown", cwd: "~", startedAt: Date().timeIntervalSince1970 * 1000)
+            let session = ClaudeSession(pid: 0, sessionId: "unknown", cwd: "~", startedAt: Date().timeIntervalSince1970 * 1000, agentType: agentType)
             let tracked = TrackedSession(session: session)
             sessions.append(tracked)
             return tracked
@@ -247,7 +253,7 @@ final class AppState {
 
         let cwd = event.payload.cwd ?? "~"
         let pid = Self.readPIDFromDisk(sessionId: sessionId)
-        let session = ClaudeSession(pid: pid, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000)
+        let session = ClaudeSession(pid: pid, sessionId: sessionId, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, agentType: agentType)
         let tracked = TrackedSession(session: session)
         sessions.append(tracked)
         return tracked

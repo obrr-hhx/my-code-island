@@ -135,6 +135,131 @@ enum SettingsConfigurator {
         }
     }
 
+    // MARK: - Codex Hooks
+
+    /// Codex hook events we want to intercept.
+    private static let codexHookEvents = [
+        "UserPromptSubmit",
+        "Stop",
+        "SessionStart",
+        "PreToolUse",
+        "PostToolUse",
+        "SubagentStart",
+        "SubagentStop",
+    ]
+
+    /// Ensure Codex hooks are configured. Call on app launch.
+    static func ensureCodexHooksConfigured() {
+        let bridgePath = resolveBridgePath()
+
+        guard FileManager.default.fileExists(atPath: bridgePath) else {
+            print("[SettingsConfigurator] Bridge binary not found at \(bridgePath)")
+            return
+        }
+
+        let hooksPath = CodeIslandConstants.codexHooksPath
+
+        // Read existing hooks
+        var settings: [String: Any] = [:]
+        if let data = FileManager.default.contents(atPath: hooksPath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            settings = json
+        }
+
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        var modified = false
+
+        for eventName in codexHookEvents {
+            if let eventHooks = hooks[eventName] as? [[String: Any]] {
+                let alreadyConfigured = eventHooks.contains { entry in
+                    if let entryHooks = entry["hooks"] as? [[String: Any]] {
+                        return entryHooks.contains { hook in
+                            (hook["command"] as? String)?.contains(marker) == true
+                        }
+                    }
+                    return false
+                }
+                if alreadyConfigured { continue }
+            }
+
+            let hookEntry: [String: Any] = [
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": bridgePath + " --source codex",
+                        "timeout": 5
+                    ]
+                ]
+            ]
+
+            var eventArray = hooks[eventName] as? [[String: Any]] ?? []
+            eventArray.append(hookEntry)
+            hooks[eventName] = eventArray
+            modified = true
+        }
+
+        guard modified else {
+            print("[SettingsConfigurator] Codex hooks already configured")
+            return
+        }
+
+        settings["hooks"] = hooks
+
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: settings,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            let backupPath = hooksPath + ".bak"
+            if FileManager.default.fileExists(atPath: hooksPath) {
+                try? FileManager.default.copyItem(atPath: hooksPath, toPath: backupPath)
+            }
+            try data.write(to: URL(fileURLWithPath: hooksPath))
+            print("[SettingsConfigurator] Codex hooks configured successfully")
+        } catch {
+            print("[SettingsConfigurator] Failed to write Codex hooks: \(error)")
+        }
+    }
+
+    /// Remove our hooks from Codex settings.
+    static func removeCodexHooks() {
+        let hooksPath = CodeIslandConstants.codexHooksPath
+
+        guard let data = FileManager.default.contents(atPath: hooksPath),
+              var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooks = settings["hooks"] as? [String: Any] else {
+            return
+        }
+
+        for eventName in codexHookEvents {
+            guard var eventArray = hooks[eventName] as? [[String: Any]] else { continue }
+            eventArray.removeAll { entry in
+                if let entryHooks = entry["hooks"] as? [[String: Any]] {
+                    return entryHooks.contains { hook in
+                        (hook["command"] as? String)?.contains(marker) == true
+                    }
+                }
+                return false
+            }
+            if eventArray.isEmpty {
+                hooks.removeValue(forKey: eventName)
+            } else {
+                hooks[eventName] = eventArray
+            }
+        }
+
+        settings["hooks"] = hooks.isEmpty ? nil : hooks
+
+        if let data = try? JSONSerialization.data(
+            withJSONObject: settings,
+            options: [.prettyPrinted, .sortedKeys]
+        ) {
+            try? data.write(to: URL(fileURLWithPath: hooksPath))
+        }
+    }
+
+    // MARK: - Bridge Path
+
     /// Find the bridge binary path.
     /// Looks for it next to the main executable (in .app bundle) or in .build/.
     private static func resolveBridgePath() -> String {

@@ -22,5 +22,7 @@
     <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Code Island uses the microphone for voice-to-text input to send commands to your terminal sessions.</string>
 </dict>
 </plist>
