@@ -42,9 +42,9 @@ struct ClawdView: View {
     @State private var clickResetTimer: Timer?
     @State private var lastBehavior: ClawdBehavior = .idle
 
-    private static let frameMS: TimeInterval = 0.06  // 60ms per frame
+    private static let frameMS: TimeInterval = 0.08  // 80ms per frame (~12fps)
     // Particle updates at lower frequency to reduce Canvas redraws
-    private static let particleFrameMS: TimeInterval = 0.10  // 100ms per particle tick
+    private static let particleFrameMS: TimeInterval = 0.25  // 250ms per particle tick (~4fps)
 
     private var viewSize: CGSize {
         CGSize(
@@ -218,9 +218,9 @@ struct ClawdView: View {
         idleCycleCount = 0
 
         let interval: TimeInterval = switch pose {
-        case .alert: 0.8
-        case .thinking: 2.0
-        default: 4.0
+        case .alert: 1.5
+        case .thinking: 3.0
+        default: 6.0
         }
 
         idleTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
@@ -273,8 +273,8 @@ struct ClawdView: View {
             }
         }
 
-        // Spawn Zzz periodically while sleeping
-        if behavior == .sleeping && particleFrameCount % 12 == 0 {
+        // Spawn Zzz periodically while sleeping (~every 5s at 250ms tick)
+        if behavior == .sleeping && particleFrameCount % 20 == 0 {
             spawnParticle(.zzz, x: pixelSize * 14, y: pixelSize * 1,
                           vx: CGFloat.random(in: 0.3...0.6),
                           vy: CGFloat.random(in: -0.8...(-0.4)),

@@ -1,16 +1,15 @@
-import SwiftUI
+import AppKit
 
-/// Main entry point for Code Island.
+/// Pure AppKit entry point — no SwiftUI scene lifecycle.
+/// All UI is managed by AppDelegate via NSPanel + NSHostingView.
+/// This avoids SwiftUI's automatic app termination when no scenes are active.
 @main
-struct CodeIslandApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    var body: some Scene {
-        // We use a Settings scene placeholder since the real UI
-        // is the NotchPanel managed by AppDelegate.
-        // This keeps the SwiftUI lifecycle happy.
-        Settings {
-            EmptyView()
-        }
+enum CodeIslandApp {
+    @MainActor
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
     }
 }

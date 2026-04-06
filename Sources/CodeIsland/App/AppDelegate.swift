@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startServices()
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false  // Menu bar app — never auto-terminate
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         SocketServer.shared.stop()
         sessionWatcher?.stop()

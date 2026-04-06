@@ -178,6 +178,10 @@ final class AppState {
     private func handlePermissionRequest(event: HookEvent, replyHandler: @escaping (BridgeResponse) -> Void) {
         switch permissionMode {
         case .alwaysAllow:
+            // Auto-approve and reset session status back to running
+            if let session = sessions.first(where: { $0.session.sessionId == event.sessionId }) {
+                session.status = .running(nil)
+            }
             replyHandler(BridgeResponse.allow())
 
         case .observe, .manual:

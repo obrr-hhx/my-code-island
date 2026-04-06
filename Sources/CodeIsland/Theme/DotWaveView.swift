@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Animated sine-wave dot grid background.
 /// Creates a flowing particle effect reminiscent of retro visualizers.
+/// Timer only runs while the view is visible to avoid wasting CPU.
 struct DotWaveView: View {
     var gridSpacing: CGFloat = 22
     var dotColor: Color = RetroTheme.cyan
@@ -44,13 +45,19 @@ struct DotWaveView: View {
                 }
             }
         }
-        .onAppear {
-            timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
-                time += 0.05
-            }
+        .onAppear { startTimer() }
+        .onDisappear { stopTimer() }
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true) { _ in
+            time += 0.05
         }
-        .onDisappear {
-            timer?.invalidate()
-        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
 }
