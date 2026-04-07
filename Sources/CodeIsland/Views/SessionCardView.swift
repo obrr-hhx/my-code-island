@@ -33,12 +33,6 @@ struct SessionCardView: View {
             color: isExpanded ? statusColor.opacity(0.4) : (isHovering ? statusColor.opacity(0.3) : RetroTheme.border.opacity(0.2)),
             cornerRadius: 6
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isExpanded.toggle()
-            }
-        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHovering = hovering
@@ -92,6 +86,12 @@ struct SessionCardView: View {
                 Text("✕")
                     .font(RetroTheme.pixelFont(size: 9, weight: .bold))
                     .foregroundStyle(.red)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isExpanded.toggle()
             }
         }
     }
