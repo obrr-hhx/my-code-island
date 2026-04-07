@@ -1,9 +1,68 @@
 import SwiftUI
 
+/// Available color themes.
+enum AppTheme: String, CaseIterable {
+    case retro = "Retro"
+    case cyberpunk = "Cyber"
+    case solarized = "Solar"
+    case dracula = "Dracula"
+    case nord = "Nord"
+
+    var colors: ThemeColors {
+        switch self {
+        case .retro:
+            return ThemeColors(
+                accent: 0x06B6D4, background: 0x0A0A0A, panelBg: 0x111111,
+                cardBg: 0x1A1A1A, border: 0x333333,
+                textPrimary: 0xE5E5E5, textSecondary: 0x888888, textMuted: 0x555555
+            )
+        case .cyberpunk:
+            return ThemeColors(
+                accent: 0xFF00FF, background: 0x0D0221, panelBg: 0x150535,
+                cardBg: 0x1A0A3E, border: 0x6B21A8,
+                textPrimary: 0x00FFFF, textSecondary: 0xFF6BFF, textMuted: 0x7C3AED
+            )
+        case .solarized:
+            return ThemeColors(
+                accent: 0x268BD2, background: 0x002B36, panelBg: 0x073642,
+                cardBg: 0x073642, border: 0x586E75,
+                textPrimary: 0xFDF6E3, textSecondary: 0x93A1A1, textMuted: 0x657B83
+            )
+        case .dracula:
+            return ThemeColors(
+                accent: 0xBD93F9, background: 0x282A36, panelBg: 0x21222C,
+                cardBg: 0x44475A, border: 0x6272A4,
+                textPrimary: 0xF8F8F2, textSecondary: 0xBFBFBF, textMuted: 0x6272A4
+            )
+        case .nord:
+            return ThemeColors(
+                accent: 0x88C0D0, background: 0x2E3440, panelBg: 0x3B4252,
+                cardBg: 0x434C5E, border: 0x4C566A,
+                textPrimary: 0xECEFF4, textSecondary: 0xD8DEE9, textMuted: 0x4C566A
+            )
+        }
+    }
+}
+
+struct ThemeColors {
+    let accent: UInt
+    let background: UInt
+    let panelBg: UInt
+    let cardBg: UInt
+    let border: UInt
+    let textPrimary: UInt
+    let textSecondary: UInt
+    let textMuted: UInt
+}
+
 /// 8-bit retro theme colors and styling constants.
+/// Colors adapt based on the active AppTheme.
 enum RetroTheme {
 
-    // MARK: - Agent Colors
+    /// Current active theme. Change this to switch all colors.
+    nonisolated(unsafe) static var activeTheme: AppTheme = .retro
+
+    // MARK: - Agent Colors (fixed across themes)
 
     /// Claude Code accent color (burnt orange/coral)
     static let claudeOrange = Color(hex: 0xD97757)
@@ -16,31 +75,25 @@ enum RetroTheme {
     /// OpenCode amber
     static let openCodeAmber = Color(hex: 0xF59E0B)
 
-    // MARK: - UI Colors
+    // MARK: - Theme-adaptive UI Colors
 
-    /// Primary cyan highlight
-    static let cyan = Color(hex: 0x06B6D4)
-    /// Dark background
-    static let background = Color(hex: 0x0A0A0A)
-    /// Panel background (slightly lighter)
-    static let panelBg = Color(hex: 0x111111)
-    /// Card background
-    static let cardBg = Color(hex: 0x1A1A1A)
-    /// Subtle border
-    static let border = Color(hex: 0x333333)
-    /// Primary text
-    static let textPrimary = Color(hex: 0xE5E5E5)
-    /// Secondary text
-    static let textSecondary = Color(hex: 0x888888)
-    /// Muted text
-    static let textMuted = Color(hex: 0x555555)
+    // These use nonisolated(unsafe) so they can be used in SwiftUI default params.
+    // Safe because activeTheme is only mutated on MainActor and SwiftUI views run on MainActor.
+    nonisolated(unsafe) static var cyan: Color { Color(hex: activeTheme.colors.accent) }
+    nonisolated(unsafe) static var background: Color { Color(hex: activeTheme.colors.background) }
+    nonisolated(unsafe) static var panelBg: Color { Color(hex: activeTheme.colors.panelBg) }
+    nonisolated(unsafe) static var cardBg: Color { Color(hex: activeTheme.colors.cardBg) }
+    nonisolated(unsafe) static var border: Color { Color(hex: activeTheme.colors.border) }
+    nonisolated(unsafe) static var textPrimary: Color { Color(hex: activeTheme.colors.textPrimary) }
+    nonisolated(unsafe) static var textSecondary: Color { Color(hex: activeTheme.colors.textSecondary) }
+    nonisolated(unsafe) static var textMuted: Color { Color(hex: activeTheme.colors.textMuted) }
 
     // MARK: - Status Colors
 
-    static let statusIdle = Color(hex: 0x555555)
-    static let statusThinking = cyan
-    static let statusToolUse = codexGreen
-    static let statusWaiting = claudeOrange
+    nonisolated(unsafe) static var statusIdle: Color { Color(hex: activeTheme.colors.textMuted) }
+    nonisolated(unsafe) static var statusThinking: Color { cyan }
+    nonisolated(unsafe) static var statusToolUse: Color { codexGreen }
+    nonisolated(unsafe) static var statusWaiting: Color { claudeOrange }
     static let statusStopped = Color(hex: 0xEF4444)
 
     // MARK: - Pixel Font

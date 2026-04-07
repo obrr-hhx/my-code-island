@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         SocketServer.shared.stop()
         sessionWatcher?.stop()
+        DashboardServer.shared.stop()
     }
 
     // MARK: - Setup
@@ -98,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsConfigurator.ensureDroidHooksConfigured()
 
         appState.loadRules()
+
+        DashboardServer.shared.start(appState: appState)
 
         print("[CodeIsland] All services started")
     }

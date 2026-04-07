@@ -8,14 +8,21 @@ struct NotchExpandedView: View {
     let panelController: NotchPanelController
 
     private let notchHeight: CGFloat = 32
-    @State private var showIdleSessions = false
     @State private var showSettings = false
+    @State private var collapsedProjects: Set<String> = []
 
-    private var runningSessions: [TrackedSession] {
-        appState.sessions.filter { $0.status != .idle }
-    }
-    private var idleSessions: [TrackedSession] {
-        appState.sessions.filter { $0.status == .idle }
+    /// Sessions grouped by project name, sorted: active projects first.
+    private var projectGroups: [(project: String, sessions: [TrackedSession])] {
+        let grouped = Dictionary(grouping: appState.sessions.filter { $0.isAlive }) {
+            $0.session.projectName
+        }
+        return grouped.map { (project: $0.key, sessions: $0.value) }
+            .sorted { lhs, rhs in
+                let lhsActive = lhs.sessions.contains { $0.status != .idle }
+                let rhsActive = rhs.sessions.contains { $0.status != .idle }
+                if lhsActive != rhsActive { return lhsActive }
+                return lhs.project < rhs.project
+            }
     }
 
     var body: some View {
@@ -34,6 +41,20 @@ struct NotchExpandedView: View {
 
                 // Header bar — starts right below the notch
                 headerBar
+
+                // Aggregate stats bar
+                if totalToolCalls > 0 {
+                    HStack(spacing: 10) {
+                        miniStat("\(appState.sessions.count)", label: "sessions", color: RetroTheme.cyan)
+                        miniStat("\(totalToolCalls)", label: "calls", color: RetroTheme.codexGreen)
+                        if totalErrors > 0 {
+                            miniStat("\(totalErrors)", label: "errors", color: RetroTheme.statusStopped)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 2)
+                }
 
                 // Pixel divider
                 pixelDivider
@@ -70,14 +91,9 @@ struct NotchExpandedView: View {
                                     ))
                             }
 
-                            // Running sessions (always visible)
-                            ForEach(runningSessions) { session in
-                                SessionCardView(session: session, appState: appState)
-                            }
-
-                            // Idle sessions (collapsed)
-                            if !idleSessions.isEmpty {
-                                idleSessionsSection
+                            // Sessions grouped by project
+                            ForEach(projectGroups, id: \.project) { group in
+                                projectSection(group)
                             }
 
                             if appState.sessions.isEmpty && appState.pendingPermissions.isEmpty && appState.pendingQuestions.isEmpty {
@@ -198,6 +214,25 @@ struct NotchExpandedView: View {
         .padding(.horizontal, 8)
     }
 
+    private var totalToolCalls: Int {
+        appState.sessions.reduce(0) { $0 + $1.toolCallCount }
+    }
+
+    private var totalErrors: Int {
+        appState.sessions.reduce(0) { $0 + $1.errorCount }
+    }
+
+    private func miniStat(_ value: String, label: String, color: Color) -> some View {
+        HStack(spacing: 2) {
+            Text(value)
+                .font(RetroTheme.pixelFont(size: 9, weight: .bold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(RetroTheme.pixelFont(size: 7))
+                .foregroundStyle(RetroTheme.textMuted)
+        }
+    }
+
     private var modeLabel: String {
         switch appState.permissionMode {
         case .observe: return "OBSERVE"
@@ -214,35 +249,51 @@ struct NotchExpandedView: View {
         }
     }
 
-    private var idleSessionsSection: some View {
-        VStack(spacing: 6) {
+    private func projectSection(_ group: (project: String, sessions: [TrackedSession])) -> some View {
+        let isCollapsed = collapsedProjects.contains(group.project)
+        let hasActive = group.sessions.contains { $0.status != .idle }
+        let activeCount = group.sessions.filter { $0.status != .idle }.count
+
+        return VStack(spacing: 4) {
+            // Project header (tap to collapse/expand)
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    showIdleSessions.toggle()
+                    if isCollapsed {
+                        collapsedProjects.remove(group.project)
+                    } else {
+                        collapsedProjects.insert(group.project)
+                    }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Text(showIdleSessions ? "▾" : "▸")
+                HStack(spacing: 5) {
+                    Text(isCollapsed ? "▸" : "▾")
+                        .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                        .foregroundStyle(RetroTheme.textMuted)
+                    Text(group.project.uppercased())
                         .font(RetroTheme.pixelFont(size: 9, weight: .bold))
+                        .foregroundStyle(hasActive ? RetroTheme.textPrimary : RetroTheme.textMuted)
+                    Text("\(group.sessions.count)")
+                        .font(RetroTheme.pixelFont(size: 8))
                         .foregroundStyle(RetroTheme.textMuted)
-                    Text("\(idleSessions.count) IDLE SESSION\(idleSessions.count == 1 ? "" : "S")")
-                        .font(RetroTheme.pixelFont(size: 9))
-                        .foregroundStyle(RetroTheme.textMuted)
+                    if activeCount > 0 {
+                        Circle()
+                            .fill(RetroTheme.statusThinking)
+                            .frame(width: 5, height: 5)
+                        Text("\(activeCount) active")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.statusThinking)
+                    }
                     Spacer()
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(RetroTheme.cardBg.opacity(0.3))
-                )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
             }
             .buttonStyle(.plain)
 
-            if showIdleSessions {
-                ForEach(idleSessions) { session in
+            if !isCollapsed {
+                ForEach(group.sessions) { session in
                     SessionCardView(session: session, appState: appState)
-                        .opacity(0.6)
+                        .opacity(session.status == .idle ? 0.6 : 1.0)
                 }
             }
         }

@@ -42,6 +42,9 @@ final class AppState {
     var permissionMode: PermissionMode = .observe
     var clawdBehavior: ClawdBehavior = .idle
     var clawdSkin: ClawdSkin = .none
+    var appTheme: AppTheme = .retro {
+        didSet { RetroTheme.activeTheme = appTheme }
+    }
     var permissionRules: [PermissionRule] = []
 
     private let maxRecentEvents = 50
@@ -108,8 +111,42 @@ final class AppState {
                     pendingQuestions.append(question)
                     isExpanded = true
                     ChiptuneEngine.shared.playNotification()
-                    return  // Don't ack yet — bridge blocks until user answers
+                    return
                 }
+            }
+
+            // Codex/Droid: PreToolUse is the permission gate when running in auto mode.
+            // User should launch with: codex --full-auto / droid --auto high
+            // Agent auto-approves everything; Code Island's hook is the safety gate.
+            // "deny" blocks execution. "allow"/ack lets the agent proceed.
+            // Claude Code uses separate PermissionRequest event instead.
+            if session.session.agentType == .codex || session.session.agentType == .droid {
+                let mode = effectivePermissionMode(for: session)
+                if mode != .alwaysAllow {
+                    let toolName = event.toolName ?? ""
+                    let input = event.payload.tool_input?.getString("command")
+                        ?? event.payload.tool_input?.getString("file_path")
+                        ?? event.payload.tool_input?.summary ?? ""
+                    // Check permission rules first
+                    if let ruleIdx = permissionRules.firstIndex(where: { $0.matches(tool: toolName, input: input) }) {
+                        permissionRules[ruleIdx].hitCount += 1
+                        let action = permissionRules[ruleIdx].action
+                        replyHandler(action == .deny ? BridgeResponse.deny(reason: "Denied by rule") : BridgeResponse.ack())
+                        return
+                    }
+                    // Show permission UI — bridge blocks, deny stops execution, allow/ack proceeds
+                    session.status = .waitingPermission
+                    session.permissionRequestCount += 1
+                    session.recordStateTransition(.waitingPermission)
+                    let request = PermissionRequest(event: event, replyHandler: replyHandler)
+                    pendingPermissions.append(request)
+                    isExpanded = true
+                    ChiptuneEngine.shared.playPermissionAlert()
+                    return
+                }
+                // alwaysAllow mode: just proceed
+                replyHandler(BridgeResponse.ack())
+                return
             }
 
             replyHandler(BridgeResponse.ack())

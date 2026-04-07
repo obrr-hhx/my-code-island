@@ -5,8 +5,10 @@ import Darwin
 
 // MARK: - Bridge Binary
 
-/// Log to stderr (visible in Claude Code debug mode, doesn't pollute stdout)
+/// Log to stderr only when --verbose is passed.
+let verbose = CommandLine.arguments.contains("--verbose")
 func log(_ msg: String) {
+    guard verbose else { return }
     FileHandle.standardError.write("[bridge] \(msg)\n".data(using: .utf8)!)
 }
 
