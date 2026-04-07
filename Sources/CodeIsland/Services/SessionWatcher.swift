@@ -32,6 +32,7 @@ final class SessionWatcher {
         var allSessions: [ClaudeSession] = []
         allSessions.append(contentsOf: scanClaude())
         allSessions.append(contentsOf: scanCodex())
+        allSessions.append(contentsOf: scanDroid())
         appState.refreshSessions(allSessions)
 
         // Resolve terminal names for sessions that haven't been resolved yet
@@ -96,12 +97,13 @@ final class SessionWatcher {
                     continue
                 }
 
-                // Check if this session has recent hook activity
-                // (Codex .jsonl files don't have PID in filename)
-                let hasRecentActivity = appState.sessions.contains {
-                    $0.session.sessionId == meta.id && $0.lastActivity.timeIntervalSinceNow > -60
+                // Check file modification time or tracked active status
+                let fileModTime = (try? fm.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+                let isRecentFile = fileModTime?.timeIntervalSinceNow ?? -999 > -300
+                let isTrackedActive = appState.sessions.contains {
+                    $0.session.sessionId == meta.id && $0.status != .idle
                 }
-                if hasRecentActivity {
+                if isRecentFile || isTrackedActive {
                     let session = ClaudeSession(
                         pid: 0,
                         sessionId: meta.id,
@@ -114,6 +116,71 @@ final class SessionWatcher {
             }
         }
         return sessions
+    }
+
+    // MARK: - Droid Sessions
+
+    /// Scan Droid session .jsonl files from ~/.factory/sessions/<project-slug>/.
+    /// Includes sessions whose file was modified recently (within 1 hour) OR
+    /// that are already tracked with non-idle status.
+    private func scanDroid() -> [ClaudeSession] {
+        let baseDir = CodeIslandConstants.droidSessionsDir
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: baseDir) else { return [] }
+
+        var sessions: [ClaudeSession] = []
+        guard let projectDirs = try? fm.contentsOfDirectory(atPath: baseDir) else { return [] }
+
+        let oneHourAgo = Date().addingTimeInterval(-3600)
+
+        for projectDir in projectDirs {
+            let projectPath = (baseDir as NSString).appendingPathComponent(projectDir)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: projectPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let files = try? fm.contentsOfDirectory(atPath: projectPath) else { continue }
+
+            for file in files where file.hasSuffix(".jsonl") {
+                let path = (projectPath as NSString).appendingPathComponent(file)
+
+                // Check file modification time — only include recent files
+                guard let attrs = try? fm.attributesOfItem(atPath: path),
+                      let modDate = attrs[.modificationDate] as? Date,
+                      modDate > oneHourAgo else { continue }
+
+                guard let handle = FileHandle(forReadingAtPath: path),
+                      let lineData = handle.readLine(),
+                      let meta = parseDroidSessionMeta(lineData) else { continue }
+
+                // Include if: file recently modified OR session is already tracked as active
+                let isTrackedActive = appState.sessions.contains {
+                    $0.session.sessionId == meta.id && $0.status != .idle
+                }
+                let isRecentFile = modDate.timeIntervalSinceNow > -300  // modified within 5 min
+
+                if isRecentFile || isTrackedActive {
+                    let session = ClaudeSession(
+                        pid: 0,
+                        sessionId: meta.id,
+                        cwd: meta.cwd,
+                        startedAt: modDate.timeIntervalSince1970 * 1000,
+                        agentType: .droid
+                    )
+                    sessions.append(session)
+                }
+            }
+        }
+        return sessions
+    }
+
+    /// Parse the first line of a Droid .jsonl file for session metadata.
+    private func parseDroidSessionMeta(_ data: Data) -> (id: String, cwd: String)? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["type"] as? String == "session_start",
+              let id = json["id"] as? String,
+              let cwd = json["cwd"] as? String else {
+            return nil
+        }
+        return (id, cwd)
     }
 
     /// Parse the first line of a Codex .jsonl file for session metadata.

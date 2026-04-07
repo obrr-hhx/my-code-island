@@ -158,9 +158,12 @@ final class TrackedSession: Identifiable {
     }
 
     func checkAlive() {
-        // pid=0 means we never resolved the real PID — treat as dead
-        guard pid > 0 else { isAlive = false; return }
-        isAlive = kill(Int32(pid), 0) == 0
+        if pid > 0 {
+            isAlive = kill(Int32(pid), 0) == 0
+        } else {
+            // pid=0: keep alive if recent activity (Droid/Codex sessions without PID)
+            isAlive = lastActivity.timeIntervalSinceNow > -300  // 5 minutes
+        }
     }
 
     /// Resolve terminal name (called from SessionWatcher each poll cycle).

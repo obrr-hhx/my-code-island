@@ -29,6 +29,9 @@ public enum CodeIslandConstants {
     /// Factory Droid settings file (same hook format as Claude Code)
     public static let droidSettingsPath = NSHomeDirectory() + "/.factory/settings.json"
 
+    /// Factory Droid sessions directory
+    public static let droidSessionsDir = NSHomeDirectory() + "/.factory/sessions"
+
     /// Dashscope API key file (legacy)
     public static let dashscopeKeyPath = NSHomeDirectory() + "/.config/code-island/dashscope.key"
 

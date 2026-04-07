@@ -220,6 +220,32 @@ struct SettingsView: View {
                 }
             }
 
+            // Theme
+            settingSection("THEME") {
+                HStack(spacing: 4) {
+                    ForEach(AppTheme.allCases, id: \.rawValue) { theme in
+                        Button {
+                            appState.appTheme = theme
+                        } label: {
+                            Text(theme.rawValue.uppercased())
+                                .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                .foregroundStyle(appState.appTheme == theme ? Color(hex: theme.colors.accent) : RetroTheme.textMuted)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(appState.appTheme == theme ? Color(hex: theme.colors.accent).opacity(0.15) : RetroTheme.cardBg)
+                                )
+                                .pixelBorder(
+                                    color: appState.appTheme == theme ? Color(hex: theme.colors.accent).opacity(0.5) : RetroTheme.border.opacity(0.3),
+                                    cornerRadius: 2
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             // Claude Hooks
             settingSection("CLAUDE HOOKS") {
                 HStack(spacing: 8) {
@@ -235,27 +261,75 @@ struct SettingsView: View {
 
             // Codex Hooks
             settingSection("CODEX HOOKS") {
-                HStack(spacing: 8) {
-                    hookButton("INSTALL", color: RetroTheme.codexGreen) {
-                        SettingsConfigurator.ensureCodexHooksConfigured()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        hookButton("INSTALL", color: RetroTheme.codexGreen) {
+                            SettingsConfigurator.ensureCodexHooksConfigured()
+                        }
+                        hookButton("REMOVE", color: RetroTheme.claudeOrange) {
+                            SettingsConfigurator.removeCodexHooks()
+                        }
+                        Spacer()
                     }
-                    hookButton("REMOVE", color: RetroTheme.claudeOrange) {
-                        SettingsConfigurator.removeCodexHooks()
-                    }
-                    Spacer()
+                    Text("Launch with: codex --full-auto")
+                        .font(RetroTheme.pixelFont(size: 7))
+                        .foregroundStyle(RetroTheme.textMuted)
                 }
             }
 
             // Droid Hooks
             settingSection("DROID HOOKS") {
-                HStack(spacing: 8) {
-                    hookButton("INSTALL", color: RetroTheme.codexGreen) {
-                        SettingsConfigurator.ensureDroidHooksConfigured()
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        hookButton("INSTALL", color: RetroTheme.codexGreen) {
+                            SettingsConfigurator.ensureDroidHooksConfigured()
+                        }
+                        hookButton("REMOVE", color: RetroTheme.claudeOrange) {
+                            SettingsConfigurator.removeDroidHooks()
+                        }
+                        Spacer()
                     }
-                    hookButton("REMOVE", color: RetroTheme.claudeOrange) {
-                        SettingsConfigurator.removeDroidHooks()
+                    Text("Launch with: droid --auto high")
+                        .font(RetroTheme.pixelFont(size: 7))
+                        .foregroundStyle(RetroTheme.textMuted)
+                }
+            }
+
+            // Dashboard
+            settingSection("WEB DASHBOARD") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        appState.dashboardEnabled.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(appState.dashboardEnabled ? "● ON" : "● OFF")
+                                .font(RetroTheme.pixelFont(size: 9, weight: .medium))
+                                .foregroundStyle(appState.dashboardEnabled ? RetroTheme.codexGreen : RetroTheme.textMuted)
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(appState.dashboardEnabled ? RetroTheme.codexGreen.opacity(0.3) : RetroTheme.cardBg)
+                                .frame(width: 28, height: 14)
+                                .overlay(
+                                    Circle()
+                                        .fill(appState.dashboardEnabled ? RetroTheme.codexGreen : RetroTheme.textMuted)
+                                        .frame(width: 10, height: 10)
+                                        .offset(x: appState.dashboardEnabled ? 6 : -6),
+                                    alignment: .center
+                                )
+                                .pixelBorder(color: RetroTheme.border.opacity(0.5), cornerRadius: 3)
+                        }
+                        .padding(.vertical, 3)
                     }
-                    Spacer()
+                    .buttonStyle(.plain)
+                    if appState.dashboardEnabled {
+                        Text("http://localhost:\(DashboardServer.port)/dashboard")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.cyan)
+                    } else {
+                        Text("Serve session status on local HTTP")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.textMuted)
+                    }
                 }
             }
 

@@ -23,6 +23,7 @@ struct NotchContentView: View {
             }
             appState.isExpanded.toggle()
         }
+        .id(appState.appTheme)  // Force full re-render on theme change
         .onChange(of: appState.isExpanded) { _, newValue in
             panelController.setExpanded(newValue)
         }

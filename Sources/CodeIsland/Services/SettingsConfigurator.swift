@@ -186,8 +186,7 @@ enum SettingsConfigurator {
                 "hooks": [
                     [
                         "type": "command",
-                        "command": bridgePath + " --source codex",
-                        "timeout": 5
+                        "command": bridgePath + " --source codex"
                     ]
                 ]
             ]
