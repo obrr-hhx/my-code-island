@@ -38,7 +38,7 @@ enum AppTheme: String, CaseIterable {
             return ThemeColors(
                 accent: 0x88C0D0, background: 0x2E3440, panelBg: 0x3B4252,
                 cardBg: 0x434C5E, border: 0x4C566A,
-                textPrimary: 0xECEFF4, textSecondary: 0xD8DEE9, textMuted: 0x4C566A
+                textPrimary: 0xECEFF4, textSecondary: 0xD8DEE9, textMuted: 0x7B88A1
             )
         }
     }
