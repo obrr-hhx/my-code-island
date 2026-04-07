@@ -100,8 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         appState.loadRules()
 
-        DashboardServer.shared.start(appState: appState)
-
         print("[CodeIsland] All services started")
     }
 

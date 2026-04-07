@@ -295,6 +295,44 @@ struct SettingsView: View {
                 }
             }
 
+            // Dashboard
+            settingSection("WEB DASHBOARD") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        appState.dashboardEnabled.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(appState.dashboardEnabled ? "● ON" : "● OFF")
+                                .font(RetroTheme.pixelFont(size: 9, weight: .medium))
+                                .foregroundStyle(appState.dashboardEnabled ? RetroTheme.codexGreen : RetroTheme.textMuted)
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(appState.dashboardEnabled ? RetroTheme.codexGreen.opacity(0.3) : RetroTheme.cardBg)
+                                .frame(width: 28, height: 14)
+                                .overlay(
+                                    Circle()
+                                        .fill(appState.dashboardEnabled ? RetroTheme.codexGreen : RetroTheme.textMuted)
+                                        .frame(width: 10, height: 10)
+                                        .offset(x: appState.dashboardEnabled ? 6 : -6),
+                                    alignment: .center
+                                )
+                                .pixelBorder(color: RetroTheme.border.opacity(0.5), cornerRadius: 3)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                    if appState.dashboardEnabled {
+                        Text("http://localhost:\(DashboardServer.port)/dashboard")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.cyan)
+                    } else {
+                        Text("Serve session status on local HTTP")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.textMuted)
+                    }
+                }
+            }
+
             // Voice Input — Doubao ASR
             settingSection("VOICE INPUT (DOUBAO ASR)") {
                 VStack(alignment: .leading, spacing: 6) {

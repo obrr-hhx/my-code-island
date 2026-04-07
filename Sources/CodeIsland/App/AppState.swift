@@ -46,6 +46,15 @@ final class AppState {
         didSet { RetroTheme.activeTheme = appTheme }
     }
     var permissionRules: [PermissionRule] = []
+    var dashboardEnabled: Bool = false {
+        didSet {
+            if dashboardEnabled {
+                DashboardServer.shared.start(appState: self)
+            } else {
+                DashboardServer.shared.stop()
+            }
+        }
+    }
 
     private let maxRecentEvents = 50
     private var sleepTimer: Timer?
