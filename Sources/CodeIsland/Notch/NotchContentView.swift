@@ -16,6 +16,11 @@ struct NotchContentView: View {
             }
         }
         .onTapGesture {
+            // Don't allow collapsing while permissions or questions are pending
+            if appState.isExpanded
+                && (!appState.pendingPermissions.isEmpty || !appState.pendingQuestions.isEmpty) {
+                return
+            }
             appState.isExpanded.toggle()
         }
         .onChange(of: appState.isExpanded) { _, newValue in

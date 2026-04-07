@@ -64,14 +64,17 @@ final class AppState {
         // Cancel sleep timer on any activity
         cancelSleepTimer()
 
-        // If this session was waiting for permission but we got a non-permission event,
-        // it means the user approved in the terminal — the tool already ran.
-        // Only clear if the session was actually in waitingPermission state.
-        if session.status == .waitingPermission
-            && event.eventName != "PermissionRequest"
-            && event.eventName != "PreToolUse" {
-            print("[AppState] Session \(session.projectName) was waiting permission but got \(event.eventName) — clearing stale requests")
-            clearStaleRequests(forSessionId: event.payload.session_id)
+        // If this session was waiting for permission but we got an event that proves
+        // the tool already ran (PostToolUse or Stop), the user must have approved
+        // in the terminal. Clear the stale permission request for THIS session only.
+        if session.status == .waitingPermission {
+            switch event.eventName {
+            case "PostToolUse", "Stop", "UserPromptSubmit":
+                print("[AppState] Session \(session.projectName) was waiting permission but got \(event.eventName) — clearing stale requests")
+                clearStaleRequests(forSessionId: event.payload.session_id)
+            default:
+                break
+            }
         }
 
         switch event.eventName {
@@ -210,13 +213,7 @@ final class AppState {
             request.replyHandler(BridgeResponse.deny(reason: "Denied by user via Code Island"))
         }
 
-        if pendingPermissions.isEmpty {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                if self?.pendingPermissions.isEmpty == true {
-                    self?.isExpanded = false
-                }
-            }
-        }
+        autoCollapseIfEmpty()
     }
 
     // MARK: - Stale Request Cleanup
@@ -224,15 +221,23 @@ final class AppState {
     /// Clear pending permissions/questions for a session that was already handled in the terminal.
     private func clearStaleRequests(forSessionId sessionId: String?) {
         guard let sessionId else { return }
-        let hadPermissions = !pendingPermissions.isEmpty
+        // Only remove the reply handlers for the matching session — don't touch other sessions
+        let stalePermissions = pendingPermissions.filter { $0.event.sessionId == sessionId }
+        for perm in stalePermissions {
+            perm.replyHandler(BridgeResponse.ack())
+        }
         pendingPermissions.removeAll { $0.event.sessionId == sessionId }
         pendingQuestions.removeAll { $0.event.sessionId == sessionId }
+        autoCollapseIfEmpty()
+    }
 
-        if hadPermissions && pendingPermissions.isEmpty && pendingQuestions.isEmpty {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                if self?.pendingPermissions.isEmpty == true && self?.pendingQuestions.isEmpty == true {
-                    self?.isExpanded = false
-                }
+    /// Collapse the panel after a delay, but only if nothing new has arrived.
+    private func autoCollapseIfEmpty() {
+        guard pendingPermissions.isEmpty && pendingQuestions.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self else { return }
+            if self.pendingPermissions.isEmpty && self.pendingQuestions.isEmpty {
+                self.isExpanded = false
             }
         }
     }
@@ -257,13 +262,7 @@ final class AppState {
         ChiptuneEngine.shared.playApproved()
         question.replyHandler(BridgeResponse.allowWithInput(.object(inputDict)))
 
-        if pendingQuestions.isEmpty && pendingPermissions.isEmpty {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                if self?.pendingQuestions.isEmpty == true && self?.pendingPermissions.isEmpty == true {
-                    self?.isExpanded = false
-                }
-            }
-        }
+        autoCollapseIfEmpty()
     }
 
     // MARK: - Session Management
