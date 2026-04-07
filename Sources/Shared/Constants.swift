@@ -4,6 +4,7 @@ import Foundation
 public enum AgentType: String, Codable, CaseIterable, Sendable {
     case claude
     case codex
+    case droid
 }
 
 public enum CodeIslandConstants {
@@ -24,6 +25,9 @@ public enum CodeIslandConstants {
 
     /// Codex CLI hooks file
     public static let codexHooksPath = NSHomeDirectory() + "/.codex/hooks.json"
+
+    /// Factory Droid settings file (same hook format as Claude Code)
+    public static let droidSettingsPath = NSHomeDirectory() + "/.factory/settings.json"
 
     /// Dashscope API key file (legacy)
     public static let dashscopeKeyPath = NSHomeDirectory() + "/.config/code-island/dashscope.key"

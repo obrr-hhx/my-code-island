@@ -11,6 +11,18 @@ import SwiftUI
 /// - Double-click triggers POKE, 4+ clicks triggers FLAIL
 /// - Behavior-driven idle loops based on app state
 /// - Particle overlay for sparkles, Zzz, smoke, stars
+/// Clawd hat/accessory skins.
+enum ClawdSkin: String, CaseIterable {
+    case none = "None"
+    case wizardHat = "Wizard"
+    case santaHat = "Santa"
+    case crown = "Crown"
+    case partyHat = "Party"
+    case sunglasses = "Shades"
+    case halo = "Halo"
+    case headphones = "Phones"
+}
+
 struct ClawdView: View {
     var pixelSize: CGFloat = 4
     var pose: ClawdPose = .default_
@@ -19,6 +31,8 @@ struct ClawdView: View {
     /// When true, enables notch-interaction idle animations (peek, hang, hide).
     /// Should only be set in collapsed notch view where clipping creates the effect.
     var notchMode: Bool = false
+    /// Current hat/accessory skin.
+    var skin: ClawdSkin = .none
 
     static let bodyColor = Color(
         red: 215.0 / 255.0,
@@ -56,7 +70,17 @@ struct ClawdView: View {
     var body: some View {
         ZStack {
             // Sprite layer — only redraws when currentFrame changes
-            ClawdSpriteCanvas(frame: currentFrame, pixelSize: pixelSize)
+            ClawdSpriteCanvas(frame: currentFrame, pixelSize: pixelSize, skin: skin)
+
+            // Hat/accessory overlay
+            if skin != .none {
+                ClawdHatCanvas(
+                    skin: skin,
+                    frame: currentFrame,
+                    pixelSize: pixelSize
+                )
+                .allowsHitTesting(false)
+            }
 
             // Particle overlay — only redraws when particles change
             if !particles.isEmpty {
@@ -350,9 +374,18 @@ struct ClawdView: View {
 private struct ClawdSpriteCanvas: View, Equatable {
     let frame: ClawdFrame
     let pixelSize: CGFloat
+    let skin: ClawdSkin
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.frame == rhs.frame && lhs.pixelSize == rhs.pixelSize
+        lhs.frame == rhs.frame && lhs.pixelSize == rhs.pixelSize && lhs.skin == rhs.skin
+    }
+
+    /// When wearing a hat, shift sprite down to make room in the top rows.
+    private var hatShift: CGFloat {
+        switch skin {
+        case .none, .sunglasses, .headphones: return 0
+        default: return pixelSize * 2
+        }
     }
 
     var body: some View {
@@ -364,14 +397,14 @@ private struct ClawdSpriteCanvas: View, Equatable {
             let totalH = CGFloat(rows) * pixelSize
             let offsetX = (size.width - totalW) / 2 + frame.xShift
             let crouchShift = CGFloat(frame.offset) * pixelSize * 3
-            let offsetY = (size.height - totalH) / 2 + crouchShift + frame.yShift
+            let offsetY = (size.height - totalH) / 2 + crouchShift + frame.yShift + hatShift
 
             for row in 0..<rows {
                 for col in 0..<grid[row].count {
                     let cell = grid[row][col]
                     guard cell != .empty else { continue }
                     let y = offsetY + CGFloat(row) * pixelSize
-                    guard y < size.height else { continue }
+                    guard y >= 0, y < size.height else { continue }
 
                     let rect = CGRect(
                         x: offsetX + CGFloat(col) * pixelSize,
@@ -444,6 +477,166 @@ private struct ClawdParticleCanvas: View {
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Hat/Accessory Canvas
+
+/// Renders hat/accessory pixel art on top of Clawd's head.
+/// Hats are drawn within the same canvas bounds — the sprite shifts down
+/// by 2 rows to make room, so hats occupy the freed top rows.
+private struct ClawdHatCanvas: View {
+    let skin: ClawdSkin
+    let frame: ClawdFrame
+    let pixelSize: CGFloat
+
+    /// Match the sprite shift so hat sits right on top of the head.
+    private var hatShift: CGFloat {
+        switch skin {
+        case .none, .sunglasses, .headphones: return 0
+        default: return pixelSize * 2
+        }
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let cols = ClawdSprite.cols
+            let rows = ClawdSprite.rows
+            let totalW = CGFloat(cols) * pixelSize
+            let totalH = CGFloat(rows) * pixelSize
+            let offsetX = (size.width - totalW) / 2 + frame.xShift
+            let crouchShift = CGFloat(frame.offset) * pixelSize * 3
+            let baseY = (size.height - totalH) / 2 + crouchShift + frame.yShift + hatShift
+
+            // Hat sits ON the head top (row 0 of sprite, which is now shifted down)
+            let hatX = offsetX + 3 * pixelSize   // head starts at col 3
+            let hatY = baseY - 2 * pixelSize      // 2 rows above shifted head
+
+            let px = pixelSize
+
+            switch skin {
+            case .none:
+                break
+
+            case .wizardHat:
+                let purple = Color(hex: 0x7B2FBE)
+                // Brim
+                fillRow(&context, x: hatX - px, y: hatY + px, cols: 14, px: px, color: purple)
+                // Middle
+                fillRow(&context, x: hatX + 2 * px, y: hatY, cols: 8, px: px, color: purple)
+                // Tip
+                fillRow(&context, x: hatX + 4 * px, y: hatY - px, cols: 4, px: px, color: purple)
+                // Star
+                context.fill(Path(CGRect(x: hatX + 5 * px, y: hatY, width: px, height: px)), with: .color(.yellow))
+
+            case .santaHat:
+                // Red body
+                fillRow(&context, x: hatX + px, y: hatY, cols: 10, px: px, color: .red)
+                fillRow(&context, x: hatX + 3 * px, y: hatY - px, cols: 6, px: px, color: .red)
+                // White brim
+                fillRow(&context, x: hatX, y: hatY + px, cols: 12, px: px, color: .white)
+                // Pompom
+                context.fill(Path(CGRect(x: hatX + 8 * px, y: hatY - 2 * px, width: px * 2, height: px * 2)), with: .color(.white))
+
+            case .crown:
+                let gold = Color(hex: 0xFFD700)
+                // Base band
+                fillRow(&context, x: hatX + px, y: hatY + px, cols: 10, px: px, color: gold)
+                // 3 peaks
+                for c in [2, 5, 8] {
+                    context.fill(Path(CGRect(x: hatX + CGFloat(c) * px, y: hatY, width: px * 2, height: px)), with: .color(gold))
+                }
+                // Jewels
+                for c in [3, 6, 9] {
+                    context.fill(Path(CGRect(x: hatX + CGFloat(c) * px, y: hatY + px, width: px, height: px)), with: .color(.red))
+                }
+
+            case .partyHat:
+                let colors: [Color] = [.red, .yellow, .blue, .green]
+                // Row 0 (wide)
+                for col in 0..<10 {
+                    let rect = CGRect(x: hatX + CGFloat(col) * px, y: hatY + px, width: px, height: px)
+                    context.fill(Path(rect), with: .color(colors[col % colors.count]))
+                }
+                // Row 1 (narrower)
+                for col in 1..<8 {
+                    let rect = CGRect(x: hatX + CGFloat(col) * px, y: hatY, width: px, height: px)
+                    context.fill(Path(rect), with: .color(colors[(col + 1) % colors.count]))
+                }
+                // Row 2 (tip)
+                for col in 3..<6 {
+                    let rect = CGRect(x: hatX + CGFloat(col) * px, y: hatY - px, width: px, height: px)
+                    context.fill(Path(rect), with: .color(colors[(col + 2) % colors.count]))
+                }
+
+            case .sunglasses:
+                // Drawn AT eye level (no hat shift for sunglasses)
+                let eyeY = baseY + 2 * px
+                let lens = Color(hex: 0x222222)
+                // Bridge
+                fillRow(&context, x: offsetX + 6 * px, y: eyeY, cols: 3, px: px, color: Color(hex: 0x444444))
+                // Left lens
+                for r in 0..<2 {
+                    fillRow(&context, x: offsetX + 3 * px, y: eyeY + CGFloat(r) * px, cols: 3, px: px, color: lens)
+                }
+                // Right lens
+                for r in 0..<2 {
+                    fillRow(&context, x: offsetX + 10 * px, y: eyeY + CGFloat(r) * px, cols: 3, px: px, color: lens)
+                }
+
+            case .halo:
+                let gold = Color(hex: 0xFFD700)
+                // Ring (with gap in middle for hollow effect)
+                for col in [2, 3, 8, 9] {
+                    context.fill(Path(CGRect(x: hatX + CGFloat(col) * px, y: hatY - px, width: px, height: px)), with: .color(gold))
+                }
+                for col in 1..<11 {
+                    context.fill(Path(CGRect(x: hatX + CGFloat(col) * px, y: hatY, width: px, height: px)), with: .color(gold.opacity(0.5)))
+                }
+
+            case .headphones:
+                // Headphones: band across top + ear cups on sides
+                // Uses sprite-relative coordinates (head is at rows 0-3, cols 3-14)
+                let band = Color(hex: 0x555555)    // dark gray band
+                let cup = Color(hex: 0x333333)     // darker ear cups
+                let cushion = Color(hex: 0x888888) // lighter inner cushion
+                let highlight = Color(hex: 0x777777)
+
+                // Headband across top of head (row 0 of shifted sprite)
+                fillRow(&context, x: hatX + px, y: hatY + px, cols: 10, px: px, color: band)
+                // Thinner top
+                fillRow(&context, x: hatX + 3 * px, y: hatY, cols: 6, px: px, color: highlight)
+
+                // Left ear cup (2×3 block on left side of head)
+                let leftCupX = offsetX + px       // col 1
+                let cupY = baseY + px              // row 1 of sprite (side of head)
+                for r in 0..<3 {
+                    for c in 0..<2 {
+                        let rect = CGRect(x: leftCupX + CGFloat(c) * px, y: cupY + CGFloat(r) * px, width: px, height: px)
+                        context.fill(Path(rect), with: .color(cup))
+                    }
+                }
+                // Cushion highlight (inner edge)
+                context.fill(Path(CGRect(x: leftCupX + px, y: cupY + px, width: px, height: px)), with: .color(cushion))
+
+                // Right ear cup (2×3 block on right side of head)
+                let rightCupX = offsetX + 15 * px  // col 15
+                for r in 0..<3 {
+                    for c in 0..<2 {
+                        let rect = CGRect(x: rightCupX + CGFloat(c) * px, y: cupY + CGFloat(r) * px, width: px, height: px)
+                        context.fill(Path(rect), with: .color(cup))
+                    }
+                }
+                // Cushion highlight (inner edge)
+                context.fill(Path(CGRect(x: rightCupX, y: cupY + px, width: px, height: px)), with: .color(cushion))
+            }
+        }
+    }
+
+    private func fillRow(_ context: inout GraphicsContext, x: CGFloat, y: CGFloat, cols: Int, px: CGFloat, color: Color) {
+        for c in 0..<cols {
+            context.fill(Path(CGRect(x: x + CGFloat(c) * px, y: y, width: px, height: px)), with: .color(color))
         }
     }
 }

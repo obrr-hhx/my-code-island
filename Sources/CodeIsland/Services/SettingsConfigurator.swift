@@ -258,6 +258,107 @@ enum SettingsConfigurator {
         }
     }
 
+    // MARK: - Droid Hooks
+
+    /// Ensure Factory Droid hooks are configured (same format as Claude Code).
+    static func ensureDroidHooksConfigured() {
+        let bridgePath = resolveBridgePath()
+        guard FileManager.default.fileExists(atPath: bridgePath) else { return }
+
+        let settingsPath = CodeIslandConstants.droidSettingsPath
+
+        // Ensure ~/.factory/ directory exists
+        let dir = (settingsPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        var settings: [String: Any] = [:]
+        if let data = FileManager.default.contents(atPath: settingsPath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            settings = json
+        }
+
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        var modified = false
+
+        for eventName in hookEvents {
+            if let eventHooks = hooks[eventName] as? [[String: Any]] {
+                let alreadyConfigured = eventHooks.contains { entry in
+                    if let entryHooks = entry["hooks"] as? [[String: Any]] {
+                        return entryHooks.contains { hook in
+                            (hook["command"] as? String)?.contains(marker) == true
+                        }
+                    }
+                    return false
+                }
+                if alreadyConfigured { continue }
+            }
+
+            let hookEntry: [String: Any] = [
+                "hooks": [
+                    [
+                        "type": "command",
+                        "command": bridgePath + " --source droid"
+                    ]
+                ]
+            ]
+
+            var eventArray = hooks[eventName] as? [[String: Any]] ?? []
+            eventArray.append(hookEntry)
+            hooks[eventName] = eventArray
+            modified = true
+        }
+
+        guard modified else {
+            print("[SettingsConfigurator] Droid hooks already configured")
+            return
+        }
+
+        settings["hooks"] = hooks
+
+        do {
+            let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+            let backupPath = settingsPath + ".bak"
+            if FileManager.default.fileExists(atPath: settingsPath) {
+                try? FileManager.default.copyItem(atPath: settingsPath, toPath: backupPath)
+            }
+            try data.write(to: URL(fileURLWithPath: settingsPath))
+            print("[SettingsConfigurator] Droid hooks configured successfully")
+        } catch {
+            print("[SettingsConfigurator] Failed to write Droid hooks: \(error)")
+        }
+    }
+
+    /// Remove our hooks from Factory Droid settings.
+    static func removeDroidHooks() {
+        let settingsPath = CodeIslandConstants.droidSettingsPath
+
+        guard let data = FileManager.default.contents(atPath: settingsPath),
+              var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooks = settings["hooks"] as? [String: Any] else { return }
+
+        for eventName in hookEvents {
+            guard var eventArray = hooks[eventName] as? [[String: Any]] else { continue }
+            eventArray.removeAll { entry in
+                if let entryHooks = entry["hooks"] as? [[String: Any]] {
+                    return entryHooks.contains { hook in
+                        (hook["command"] as? String)?.contains(marker) == true
+                    }
+                }
+                return false
+            }
+            if eventArray.isEmpty {
+                hooks.removeValue(forKey: eventName)
+            } else {
+                hooks[eventName] = eventArray
+            }
+        }
+
+        settings["hooks"] = hooks.isEmpty ? nil : hooks
+        if let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: settingsPath))
+        }
+    }
+
     // MARK: - Bridge Path
 
     /// Find the bridge binary path.

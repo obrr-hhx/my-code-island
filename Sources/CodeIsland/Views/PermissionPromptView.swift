@@ -57,13 +57,34 @@ struct PermissionPromptView: View {
             }
 
             // Action bar
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 // Timer
                 Text(timeAgo(request.createdAt))
                     .font(RetroTheme.pixelFont(size: 8))
                     .foregroundStyle(RetroTheme.textMuted)
 
                 Spacer()
+
+                // Always Allow (create rule)
+                Button {
+                    appState.addRuleFromRequest(request, action: .allow)
+                    ChiptuneEngine.shared.playApproved()
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        appState.resolvePermission(request, approve: true)
+                    }
+                } label: {
+                    Text("ALWAYS")
+                        .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                        .foregroundStyle(RetroTheme.cyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(RetroTheme.cyan.opacity(0.1))
+                        )
+                        .pixelBorder(color: RetroTheme.cyan.opacity(0.3), cornerRadius: 4)
+                }
+                .buttonStyle(.plain)
 
                 // Deny button
                 Button {

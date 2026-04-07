@@ -70,6 +70,66 @@ struct PermissionRequest: Identifiable {
     }
 }
 
+// MARK: - Permission Rules
+
+/// A rule for auto-approving or auto-denying specific tool calls.
+struct PermissionRule: Identifiable, Codable, Equatable {
+    let id: UUID
+    /// Tool name to match (e.g. "Bash", "Read"). Empty = match all tools.
+    var toolName: String
+    /// Regex pattern to match against tool input (command, file_path, etc.). Empty = match any input.
+    var inputPattern: String
+    /// Action to take when matched.
+    var action: RuleAction
+    /// How many times this rule has been triggered.
+    var hitCount: Int
+
+    init(toolName: String, inputPattern: String = "", action: RuleAction = .allow) {
+        self.id = UUID()
+        self.toolName = toolName
+        self.inputPattern = inputPattern
+        self.action = action
+        self.hitCount = 0
+    }
+
+    enum RuleAction: String, Codable {
+        case allow
+        case deny
+    }
+
+    /// Check if this rule matches a permission request.
+    func matches(tool: String, input: String) -> Bool {
+        // Tool name must match (case-insensitive)
+        guard toolName.lowercased() == tool.lowercased() else { return false }
+        // If no input pattern, match any input
+        guard !inputPattern.isEmpty else { return true }
+        // Regex match on input
+        guard let regex = try? NSRegularExpression(pattern: inputPattern, options: [.caseInsensitive]) else { return false }
+        return regex.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)) != nil
+    }
+}
+
+/// Pre-defined safe tools that can be auto-approved.
+enum PermissionRulePresets {
+    /// Read-only tools that never modify the filesystem.
+    static let safeTools = ["Read", "Glob", "Grep", "WebSearch", "WebFetch", "LSP"]
+
+    /// Create rules for all safe tools.
+    static func safeToolRules() -> [PermissionRule] {
+        safeTools.map { PermissionRule(toolName: $0, action: .allow) }
+    }
+
+    /// Safe git commands (read-only).
+    static func safeGitRule() -> PermissionRule {
+        PermissionRule(toolName: "Bash", inputPattern: "^(git\\s+(status|diff|log|branch|show|remote|stash list))", action: .allow)
+    }
+
+    /// Safe listing commands.
+    static func safeListRule() -> PermissionRule {
+        PermissionRule(toolName: "Bash", inputPattern: "^(ls|pwd|echo|cat|head|tail|wc|which|type|file)\\b", action: .allow)
+    }
+}
+
 /// A pending AskUserQuestion awaiting user selection.
 struct UserQuestion: Identifiable {
     let id = UUID()

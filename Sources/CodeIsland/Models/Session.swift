@@ -85,6 +85,47 @@ final class TrackedSession: Identifiable {
     var lastActivity: Date = Date()
     var isAlive: Bool = true
     var activeSubagentCount: Int = 0
+    /// Files currently being edited (tracked from PreToolUse for Edit/Write tools).
+    var activeFiles: Set<String> = []
+    /// Per-session permission mode. nil = use global default.
+    var permissionModeOverride: PermissionMode?
+
+    // MARK: - Session Analytics
+
+    /// Total tool calls observed in this session.
+    var toolCallCount: Int = 0
+    /// Breakdown of tool calls by tool name.
+    var toolFrequency: [String: Int] = [:]
+    /// Number of errors detected (PostToolUse with error).
+    var errorCount: Int = 0
+    /// Number of permission requests received.
+    var permissionRequestCount: Int = 0
+    /// Number of context compactions (PreCompact events).
+    var compactCount: Int = 0
+    /// Timestamps of state transitions for timeline visualization.
+    var stateTimeline: [(date: Date, status: SessionStatus)] = []
+
+    /// Record a tool call for analytics.
+    func recordToolCall(_ toolName: String?) {
+        toolCallCount += 1
+        if let name = toolName {
+            toolFrequency[name, default: 0] += 1
+        }
+    }
+
+    /// Record a state transition for the timeline.
+    func recordStateTransition(_ newStatus: SessionStatus) {
+        // Keep last 200 entries to bound memory
+        if stateTimeline.count > 200 {
+            stateTimeline.removeFirst(stateTimeline.count - 150)
+        }
+        stateTimeline.append((date: Date(), status: newStatus))
+    }
+
+    /// Top 3 most-used tools.
+    var topTools: [(name: String, count: Int)] {
+        toolFrequency.sorted { $0.value > $1.value }.prefix(3).map { ($0.key, $0.value) }
+    }
     /// Cached terminal app name (e.g. "iTerm", "Term", "Ghostty"). Resolved once.
     var terminalName: String = "?"
     /// TTY of the session process (e.g. "/dev/ttys005"). Set during terminal detection.
