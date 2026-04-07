@@ -133,6 +133,12 @@ final class AppState {
             session.status = .running(nil)
             session.lastActivity = Date()
             session.activeSubagentCount += 1
+            // Track subagent by ID if available
+            if let agentId = event.payload.agent_id {
+                let agentType = event.payload.agent_type ?? "Agent"
+                let subagent = Subagent(id: agentId, agentType: agentType, startedAt: Date())
+                session.activeSubagents.append(subagent)
+            }
             updateSubagentBehavior()
             replyHandler(BridgeResponse.ack())
 
@@ -140,6 +146,15 @@ final class AppState {
             session.status = .running(nil)
             session.lastActivity = Date()
             session.activeSubagentCount = max(0, session.activeSubagentCount - 1)
+            // Remove subagent by ID
+            if let agentId = event.payload.agent_id {
+                session.activeSubagents.removeAll { $0.id == agentId }
+            } else {
+                // No ID — remove oldest
+                if !session.activeSubagents.isEmpty {
+                    session.activeSubagents.removeFirst()
+                }
+            }
             updateSubagentBehavior()
             replyHandler(BridgeResponse.ack())
 
@@ -156,6 +171,7 @@ final class AppState {
             session.status = .idle
             session.lastActivity = Date()
             session.activeSubagentCount = 0
+            session.activeSubagents.removeAll()
             session.recordStateTransition(.idle)
             setBehavior(.celebrating, autoResetAfter: 2.0)
             ChiptuneEngine.shared.playCelebration()
@@ -387,6 +403,7 @@ final class AppState {
                 // Update PID from disk if hook-created session had pid=0
                 if existing.pid == 0 && ds.pid > 0 {
                     existing.session = ds
+                    existing.resetTerminalDetection()
                 }
             } else {
                 sessions.append(TrackedSession(session: ds))
@@ -395,7 +412,13 @@ final class AppState {
 
         let diskIds = Set(diskSessions.map(\.sessionId))
         sessions.removeAll { session in
+            // Keep sessions that are on disk
             if diskIds.contains(session.session.sessionId) { return false }
+            // Never remove sessions that are actively running or waiting for permission
+            if session.status != .idle { return false }
+            // Never remove sessions with recent activity (within 120s)
+            if session.lastActivity.timeIntervalSinceNow > -120 { return false }
+            // Check process liveness for the rest
             session.checkAlive()
             return !session.isAlive
         }

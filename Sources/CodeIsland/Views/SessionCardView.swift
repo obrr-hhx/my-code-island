@@ -174,7 +174,76 @@ struct SessionCardView: View {
                 }
             }
 
-            // Row 4: Actions
+            // Row 4: Active subagents within this session
+            if !session.activeSubagents.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SUBAGENTS (\(session.activeSubagents.count))")
+                        .font(RetroTheme.pixelFont(size: 7))
+                        .foregroundStyle(RetroTheme.textMuted)
+                    HStack(spacing: 4) {
+                        ForEach(session.activeSubagents) { sub in
+                            HStack(spacing: 2) {
+                                Circle()
+                                    .fill(RetroTheme.statusThinking)
+                                    .frame(width: 4, height: 4)
+                                Text(sub.agentType)
+                                    .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                    .foregroundStyle(RetroTheme.textSecondary)
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 2).fill(RetroTheme.cyan.opacity(0.08)))
+                            .pixelBorder(color: RetroTheme.cyan.opacity(0.2), cornerRadius: 2)
+                        }
+                    }
+                }
+            }
+
+            // Row 5: Sibling agents in same project + file conflicts
+            if let siblings = siblingAgents, !siblings.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Text("ALSO IN PROJECT:")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.textMuted)
+                        ForEach(siblings) { sibling in
+                            HStack(spacing: 2) {
+                                Circle()
+                                    .fill(siblingDotColor(sibling.status))
+                                    .frame(width: 4, height: 4)
+                                Text(siblingBadge(sibling))
+                                    .font(RetroTheme.pixelFont(size: 6, weight: .bold))
+                                    .foregroundStyle(RetroTheme.textMuted)
+                                if let tool = sibling.currentTool {
+                                    Text(tool)
+                                        .font(RetroTheme.pixelFont(size: 6))
+                                        .foregroundStyle(RetroTheme.textMuted.opacity(0.7))
+                                }
+                            }
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 1)
+                            .background(RoundedRectangle(cornerRadius: 2).fill(RetroTheme.background.opacity(0.5)))
+                        }
+                    }
+
+                    // File conflicts with siblings
+                    let conflicts = sessionFileConflicts
+                    if !conflicts.isEmpty {
+                        ForEach(conflicts, id: \.self) { file in
+                            HStack(spacing: 3) {
+                                Text("⚠")
+                                    .font(RetroTheme.pixelFont(size: 7))
+                                    .foregroundStyle(RetroTheme.claudeOrange)
+                                Text(file)
+                                    .font(RetroTheme.pixelFont(size: 7))
+                                    .foregroundStyle(RetroTheme.claudeOrange.opacity(0.8))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Row 5: Actions
             HStack(spacing: 6) {
                 // Jump to terminal
                 actionButton("TERMINAL", icon: "▶") {
@@ -275,6 +344,37 @@ struct SessionCardView: View {
         case .observe: return RetroTheme.cyan
         case .alwaysAllow: return RetroTheme.codexGreen
         case .manual: return RetroTheme.claudeOrange
+        }
+    }
+
+    /// Other sessions in the same project directory (excluding self).
+    private var siblingAgents: [TrackedSession]? {
+        let siblings = appState.sessions.filter {
+            $0.id != session.id && $0.session.cwd == session.session.cwd && $0.isAlive
+        }
+        return siblings.isEmpty ? nil : siblings
+    }
+
+    /// Files being edited by both this session and sibling sessions.
+    private var sessionFileConflicts: [String] {
+        guard let siblings = siblingAgents else { return [] }
+        let siblingFiles = Set(siblings.flatMap(\.activeFiles))
+        return session.activeFiles.intersection(siblingFiles).map { ($0 as NSString).lastPathComponent }
+    }
+
+    private func siblingDotColor(_ status: SessionStatus) -> Color {
+        switch status {
+        case .idle: return RetroTheme.statusIdle
+        case .running(let tool): return tool != nil ? RetroTheme.statusToolUse : RetroTheme.statusThinking
+        case .waitingPermission: return RetroTheme.statusWaiting
+        }
+    }
+
+    private func siblingBadge(_ sibling: TrackedSession) -> String {
+        switch sibling.session.agentType {
+        case .claude: return "CC"
+        case .codex: return "CX"
+        case .droid: return "DR"
         }
     }
 

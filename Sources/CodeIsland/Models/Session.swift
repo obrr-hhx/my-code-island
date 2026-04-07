@@ -1,6 +1,13 @@
 import AppKit
 import Foundation
 
+/// A subagent spawned within a Claude Code session (via Task tool).
+struct Subagent: Identifiable, Equatable {
+    let id: String        // agent_id from hook
+    let agentType: String // "Explore", "Plan", "Bash", etc.
+    let startedAt: Date
+}
+
 /// Represents a Claude Code session discovered from ~/.claude/sessions/.
 struct ClaudeSession: Identifiable, Codable {
     var pid: Int
@@ -85,6 +92,8 @@ final class TrackedSession: Identifiable {
     var lastActivity: Date = Date()
     var isAlive: Bool = true
     var activeSubagentCount: Int = 0
+    /// Active subagents spawned by this session (from SubagentStart/Stop events).
+    var activeSubagents: [Subagent] = []
     /// Files currently being edited (tracked from PreToolUse for Edit/Write tools).
     var activeFiles: Set<String> = []
     /// Per-session permission mode. nil = use global default.
@@ -154,7 +163,14 @@ final class TrackedSession: Identifiable {
         isAlive = kill(Int32(pid), 0) == 0
     }
 
-    /// Resolve terminal name once (called from SessionWatcher on background-safe context).
+    /// Resolve terminal name (called from SessionWatcher each poll cycle).
+    /// Retries if PID was previously 0 and has since been back-filled.
+    /// Reset so terminal detection re-runs on next poll (e.g. after PID back-fill).
+    func resetTerminalDetection() {
+        terminalResolved = false
+        terminalName = "?"
+    }
+
     func resolveTerminalIfNeeded() {
         guard !terminalResolved, pid > 0 else { return }
         terminalResolved = true

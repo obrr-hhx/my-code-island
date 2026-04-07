@@ -110,6 +110,9 @@ public struct HookEventPayload: Codable, Sendable {
     public let reason: String?
     public let message: String?
     public let title: String?
+    // SubagentStart/Stop fields
+    public let agent_id: String?
+    public let agent_type: String?
 }
 
 /// Response from main app to bridge.

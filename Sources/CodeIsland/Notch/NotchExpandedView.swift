@@ -70,37 +70,6 @@ struct NotchExpandedView: View {
                                     ))
                             }
 
-                            // Multi-agent orchestration (when multiple sessions in same project)
-                            if !appState.multiAgentProjects.isEmpty {
-                                orchestrationSection
-                            }
-
-                            // File conflict warnings
-                            ForEach(appState.fileConflicts, id: \.file) { conflict in
-                                HStack(spacing: 4) {
-                                    Text("⚠")
-                                        .font(RetroTheme.pixelFont(size: 9))
-                                        .foregroundStyle(RetroTheme.claudeOrange)
-                                    Text("CONFLICT:")
-                                        .font(RetroTheme.pixelFont(size: 8, weight: .bold))
-                                        .foregroundStyle(RetroTheme.claudeOrange)
-                                    Text(conflict.file)
-                                        .font(RetroTheme.pixelFont(size: 8))
-                                        .foregroundStyle(RetroTheme.textPrimary)
-                                    Text("(\(conflict.sessions.count) agents)")
-                                        .font(RetroTheme.pixelFont(size: 7))
-                                        .foregroundStyle(RetroTheme.textMuted)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(RetroTheme.claudeOrange.opacity(0.08))
-                                )
-                                .pixelBorder(color: RetroTheme.claudeOrange.opacity(0.3), cornerRadius: 4)
-                            }
-
                             // Running sessions (always visible)
                             ForEach(runningSessions) { session in
                                 SessionCardView(session: session, appState: appState)
@@ -242,67 +211,6 @@ struct NotchExpandedView: View {
         case .observe: return RetroTheme.cyan
         case .alwaysAllow: return RetroTheme.codexGreen
         case .manual: return RetroTheme.claudeOrange
-        }
-    }
-
-    private var orchestrationSection: some View {
-        VStack(spacing: 6) {
-            ForEach(appState.multiAgentProjects, id: \.project) { project in
-                VStack(alignment: .leading, spacing: 4) {
-                    // Project header
-                    HStack(spacing: 4) {
-                        Text("⚡")
-                            .font(RetroTheme.pixelFont(size: 9))
-                        Text(project.project.uppercased())
-                            .font(RetroTheme.pixelFont(size: 9, weight: .bold))
-                            .foregroundStyle(RetroTheme.cyan)
-                        Text("— \(project.sessions.count) AGENTS")
-                            .font(RetroTheme.pixelFont(size: 8))
-                            .foregroundStyle(RetroTheme.textMuted)
-                        Spacer()
-                    }
-
-                    // Agent status bar — compact row of dots showing each session's state
-                    HStack(spacing: 3) {
-                        ForEach(project.sessions) { session in
-                            HStack(spacing: 2) {
-                                Circle()
-                                    .fill(dotColor(for: session.status))
-                                    .frame(width: 5, height: 5)
-                                Text(session.session.agentType == .codex ? "CX" : session.session.agentType == .droid ? "DR" : "CC")
-                                    .font(RetroTheme.pixelFont(size: 6, weight: .bold))
-                                    .foregroundStyle(RetroTheme.textMuted)
-                                if let tool = session.currentTool {
-                                    Text(tool)
-                                        .font(RetroTheme.pixelFont(size: 6))
-                                        .foregroundStyle(RetroTheme.textMuted.opacity(0.7))
-                                }
-                            }
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(RetroTheme.cardBg)
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(RetroTheme.cyan.opacity(0.04))
-                )
-                .pixelBorder(color: RetroTheme.cyan.opacity(0.2), cornerRadius: 6)
-            }
-        }
-    }
-
-    private func dotColor(for status: SessionStatus) -> Color {
-        switch status {
-        case .idle: return RetroTheme.statusIdle
-        case .running(let tool): return tool != nil ? RetroTheme.statusToolUse : RetroTheme.statusThinking
-        case .waitingPermission: return RetroTheme.statusWaiting
         }
     }
 
