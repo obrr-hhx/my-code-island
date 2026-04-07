@@ -95,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         SettingsConfigurator.ensureHooksConfigured()
         SettingsConfigurator.ensureCodexHooksConfigured()
+        SettingsConfigurator.ensureDroidHooksConfigured()
+
+        appState.loadRules()
 
         print("[CodeIsland] All services started")
     }

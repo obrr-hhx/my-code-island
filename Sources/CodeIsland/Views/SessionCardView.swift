@@ -3,6 +3,7 @@ import SwiftUI
 /// Displays a single Claude Code session with 8-bit retro styling.
 struct SessionCardView: View {
     let session: TrackedSession
+    let appState: AppState
     @State private var isHovering = false
 
     var body: some View {
@@ -22,14 +23,14 @@ struct SessionCardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     // Agent type badge
-                    Text(session.session.agentType == .codex ? "CX" : "CC")
+                    Text(agentBadgeLabel)
                         .font(RetroTheme.pixelFont(size: 7, weight: .bold))
-                        .foregroundStyle(session.session.agentType == .codex ? RetroTheme.codexGreen : RetroTheme.cyan)
+                        .foregroundStyle(agentBadgeColor)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(
                             RoundedRectangle(cornerRadius: 2)
-                                .fill((session.session.agentType == .codex ? RetroTheme.codexGreen : RetroTheme.cyan).opacity(0.15))
+                                .fill(agentBadgeColor.opacity(0.15))
                         )
 
                     // Terminal badge
@@ -71,6 +72,39 @@ struct SessionCardView: View {
 
             Spacer()
 
+            // Analytics mini-stats (only when hovering)
+            if isHovering && session.toolCallCount > 0 {
+                VStack(alignment: .trailing, spacing: 2) {
+                    // Tool calls + errors
+                    HStack(spacing: 3) {
+                        Text("\(session.toolCallCount)")
+                            .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                            .foregroundStyle(RetroTheme.cyan)
+                        Text("calls")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.textMuted)
+                        if session.errorCount > 0 {
+                            Text("\(session.errorCount)err")
+                                .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                .foregroundStyle(Color.red.opacity(0.8))
+                        }
+                    }
+                    // Top tool
+                    if let top = session.topTools.first {
+                        Text("\(top.name)×\(top.count)")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.textMuted)
+                    }
+                    // Compact count
+                    if session.compactCount > 0 {
+                        Text("⟳\(session.compactCount)")
+                            .font(RetroTheme.pixelFont(size: 7))
+                            .foregroundStyle(RetroTheme.claudeOrange.opacity(0.6))
+                    }
+                }
+                .transition(.opacity)
+            }
+
             // Elapsed time in retro box
             VStack(spacing: 1) {
                 Text(session.session.elapsed)
@@ -84,6 +118,29 @@ struct SessionCardView: View {
                     .fill(RetroTheme.background.opacity(0.5))
             )
             .pixelBorder(color: RetroTheme.border.opacity(0.3), cornerRadius: 3)
+
+            // Per-session permission mode toggle
+            Button {
+                let modes = PermissionMode.allCases
+                let current = appState.effectivePermissionMode(for: session)
+                if let idx = modes.firstIndex(of: current) {
+                    let next = modes[(idx + 1) % modes.count]
+                    // If cycling back to global default, clear override
+                    session.permissionModeOverride = (next == appState.permissionMode) ? nil : next
+                }
+            } label: {
+                Text(sessionModeLabel)
+                    .font(RetroTheme.pixelFont(size: 6, weight: .bold))
+                    .foregroundStyle(sessionModeColor)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(sessionModeColor.opacity(0.12))
+                    )
+                    .pixelBorder(color: sessionModeColor.opacity(0.3), cornerRadius: 2)
+            }
+            .buttonStyle(.plain)
 
             // Mic button for voice input
             Button {
@@ -129,6 +186,40 @@ struct SessionCardView: View {
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHovering = hovering
             }
+        }
+    }
+
+    private var agentBadgeLabel: String {
+        switch session.session.agentType {
+        case .claude: return "CC"
+        case .codex: return "CX"
+        case .droid: return "DR"
+        }
+    }
+
+    private var agentBadgeColor: Color {
+        switch session.session.agentType {
+        case .claude: return RetroTheme.cyan
+        case .codex: return RetroTheme.codexGreen
+        case .droid: return RetroTheme.cursorPurple
+        }
+    }
+
+    private var sessionModeLabel: String {
+        let mode = appState.effectivePermissionMode(for: session)
+        let isOverride = session.permissionModeOverride != nil
+        switch mode {
+        case .observe: return isOverride ? "OBS" : "obs"
+        case .alwaysAllow: return isOverride ? "AUTO" : "auto"
+        case .manual: return isOverride ? "MAN" : "man"
+        }
+    }
+
+    private var sessionModeColor: Color {
+        switch appState.effectivePermissionMode(for: session) {
+        case .observe: return RetroTheme.cyan
+        case .alwaysAllow: return RetroTheme.codexGreen
+        case .manual: return RetroTheme.claudeOrange
         }
     }
 

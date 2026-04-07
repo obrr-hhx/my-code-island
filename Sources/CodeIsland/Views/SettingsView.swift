@@ -11,8 +11,8 @@ struct SettingsView: View {
     @State private var apiKeySaved = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Header
+        VStack(spacing: 8) {
+            // Header (fixed, not scrollable)
             HStack {
                 Text("⚙ SETTINGS")
                     .font(RetroTheme.pixelFont(size: 11, weight: .bold))
@@ -33,6 +33,12 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            // Scrollable content
+            ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 10) {
 
             pixelDivider
 
@@ -88,6 +94,132 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
 
+            // Permission Rules
+            settingSection("AUTO-APPROVE RULES") {
+                VStack(alignment: .leading, spacing: 6) {
+                    // Preset buttons
+                    HStack(spacing: 4) {
+                        Button {
+                            for rule in PermissionRulePresets.safeToolRules() {
+                                if !appState.permissionRules.contains(where: { $0.toolName == rule.toolName && $0.inputPattern == rule.inputPattern }) {
+                                    appState.permissionRules.append(rule)
+                                }
+                            }
+                            appState.saveRules()
+                        } label: {
+                            Text("+ SAFE TOOLS")
+                                .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                .foregroundStyle(RetroTheme.codexGreen)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 3)
+                                .background(RoundedRectangle(cornerRadius: 2).fill(RetroTheme.codexGreen.opacity(0.1)))
+                                .pixelBorder(color: RetroTheme.codexGreen.opacity(0.3), cornerRadius: 2)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            let rules = [PermissionRulePresets.safeGitRule(), PermissionRulePresets.safeListRule()]
+                            for rule in rules {
+                                if !appState.permissionRules.contains(where: { $0.toolName == rule.toolName && $0.inputPattern == rule.inputPattern }) {
+                                    appState.permissionRules.append(rule)
+                                }
+                            }
+                            appState.saveRules()
+                        } label: {
+                            Text("+ SAFE CMDS")
+                                .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                .foregroundStyle(RetroTheme.cyan)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 3)
+                                .background(RoundedRectangle(cornerRadius: 2).fill(RetroTheme.cyan.opacity(0.1)))
+                                .pixelBorder(color: RetroTheme.cyan.opacity(0.3), cornerRadius: 2)
+                        }
+                        .buttonStyle(.plain)
+
+                        if !appState.permissionRules.isEmpty {
+                            Button {
+                                appState.permissionRules.removeAll()
+                                appState.saveRules()
+                            } label: {
+                                Text("CLEAR ALL")
+                                    .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                    .foregroundStyle(RetroTheme.statusStopped)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 3)
+                                    .background(RoundedRectangle(cornerRadius: 2).fill(RetroTheme.statusStopped.opacity(0.1)))
+                                    .pixelBorder(color: RetroTheme.statusStopped.opacity(0.3), cornerRadius: 2)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    // Active rules list
+                    if appState.permissionRules.isEmpty {
+                        Text("No rules — tools will prompt for approval")
+                            .font(RetroTheme.pixelFont(size: 8))
+                            .foregroundStyle(RetroTheme.textMuted)
+                    } else {
+                        ForEach(appState.permissionRules) { rule in
+                            HStack(spacing: 4) {
+                                Text(rule.action == .allow ? "✓" : "✕")
+                                    .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                                    .foregroundStyle(rule.action == .allow ? RetroTheme.codexGreen : RetroTheme.statusStopped)
+                                Text(rule.toolName)
+                                    .font(RetroTheme.pixelFont(size: 8, weight: .bold))
+                                    .foregroundStyle(RetroTheme.textPrimary)
+                                if !rule.inputPattern.isEmpty {
+                                    Text(rule.inputPattern)
+                                        .font(RetroTheme.pixelFont(size: 7))
+                                        .foregroundStyle(RetroTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                if rule.hitCount > 0 {
+                                    Text("×\(rule.hitCount)")
+                                        .font(RetroTheme.pixelFont(size: 7))
+                                        .foregroundStyle(RetroTheme.textMuted)
+                                }
+                                Button {
+                                    appState.permissionRules.removeAll { $0.id == rule.id }
+                                    appState.saveRules()
+                                } label: {
+                                    Text("✕")
+                                        .font(RetroTheme.pixelFont(size: 7))
+                                        .foregroundStyle(RetroTheme.textMuted)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Clawd Skin
+            settingSection("CLAWD SKIN") {
+                HStack(spacing: 4) {
+                    ForEach(ClawdSkin.allCases, id: \.rawValue) { skin in
+                        Button {
+                            appState.clawdSkin = skin
+                        } label: {
+                            Text(skin.rawValue.uppercased())
+                                .font(RetroTheme.pixelFont(size: 7, weight: .bold))
+                                .foregroundStyle(appState.clawdSkin == skin ? RetroTheme.cyan : RetroTheme.textMuted)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(appState.clawdSkin == skin ? RetroTheme.cyan.opacity(0.15) : RetroTheme.cardBg)
+                                )
+                                .pixelBorder(
+                                    color: appState.clawdSkin == skin ? RetroTheme.cyan.opacity(0.5) : RetroTheme.border.opacity(0.3),
+                                    cornerRadius: 2
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             // Claude Hooks
             settingSection("CLAUDE HOOKS") {
                 HStack(spacing: 8) {
@@ -109,6 +241,19 @@ struct SettingsView: View {
                     }
                     hookButton("REMOVE", color: RetroTheme.claudeOrange) {
                         SettingsConfigurator.removeCodexHooks()
+                    }
+                    Spacer()
+                }
+            }
+
+            // Droid Hooks
+            settingSection("DROID HOOKS") {
+                HStack(spacing: 8) {
+                    hookButton("INSTALL", color: RetroTheme.codexGreen) {
+                        SettingsConfigurator.ensureDroidHooksConfigured()
+                    }
+                    hookButton("REMOVE", color: RetroTheme.claudeOrange) {
+                        SettingsConfigurator.removeDroidHooks()
                     }
                     Spacer()
                 }
@@ -143,9 +288,11 @@ struct SettingsView: View {
                 }
             }
 
-            Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            }  // ScrollView
         }
-        .padding(12)
     }
 
     // MARK: - Helpers

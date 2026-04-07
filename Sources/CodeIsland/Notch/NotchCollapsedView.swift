@@ -45,7 +45,7 @@ struct NotchCollapsedView: View {
     var body: some View {
         HStack(spacing: 0) {
             // === LEFT WING: Clawd + label ===
-            // clipped() so notch-peek animations get hidden at the wing/notch boundary
+            // Clip horizontally for notch-peek, allow hat overflow above notch
             leftWing
                 .frame(width: notchGeometry.leftWidth, height: notchGeometry.height)
                 .clipped()
@@ -80,7 +80,7 @@ struct NotchCollapsedView: View {
     private var leftWing: some View {
         HStack(spacing: 6) {
             ZStack {
-                ClawdView(pixelSize: 2.5, pose: clawdPose, behavior: appState.clawdBehavior, animated: true, notchMode: true)
+                ClawdView(pixelSize: 2.5, pose: clawdPose, behavior: appState.clawdBehavior, animated: true, notchMode: true, skin: appState.clawdSkin)
                     .frame(width: 32, height: 26)
 
                 // Error flash overlay

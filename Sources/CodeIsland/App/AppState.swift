@@ -41,6 +41,8 @@ final class AppState {
     var isExpanded: Bool = false
     var permissionMode: PermissionMode = .observe
     var clawdBehavior: ClawdBehavior = .idle
+    var clawdSkin: ClawdSkin = .none
+    var permissionRules: [PermissionRule] = []
 
     private let maxRecentEvents = 50
     private var sleepTimer: Timer?
@@ -90,6 +92,13 @@ final class AppState {
         case "PreToolUse":
             session.status = .running(event.toolName)
             session.lastActivity = Date()
+            session.recordToolCall(event.toolName)
+            session.recordStateTransition(.running(event.toolName))
+            // Track file edits for conflict detection
+            if let tool = event.toolName, ["Edit", "Write", "NotebookEdit"].contains(tool),
+               let path = event.payload.tool_input?.getString("file_path") {
+                session.activeFiles.insert(path)
+            }
             setBehavior(.toolUse)
 
             // Intercept AskUserQuestion — show options in Island UI
@@ -110,6 +119,7 @@ final class AppState {
             if hasToolError(event.payload.tool_result) {
                 session.status = .running(nil)
                 session.lastActivity = Date()
+                session.errorCount += 1
                 setBehavior(.error, autoResetAfter: 3.0)
                 ChiptuneEngine.shared.playError()
             } else {
@@ -137,6 +147,8 @@ final class AppState {
         case "PermissionRequest":
             session.status = .waitingPermission
             session.lastActivity = Date()
+            session.permissionRequestCount += 1
+            session.recordStateTransition(.waitingPermission)
             handlePermissionRequest(event: event, replyHandler: replyHandler)
 
         // === Loop end ===
@@ -144,6 +156,7 @@ final class AppState {
             session.status = .idle
             session.lastActivity = Date()
             session.activeSubagentCount = 0
+            session.recordStateTransition(.idle)
             setBehavior(.celebrating, autoResetAfter: 2.0)
             ChiptuneEngine.shared.playCelebration()
             replyHandler(BridgeResponse.ack())
@@ -151,6 +164,7 @@ final class AppState {
         // === Context compaction ===
         case "PreCompact":
             session.lastActivity = Date()
+            session.compactCount += 1
             setBehavior(.sweeping, autoResetAfter: 3.0)
             ChiptuneEngine.shared.playSweep()
             replyHandler(BridgeResponse.ack())
@@ -178,21 +192,72 @@ final class AppState {
 
     // MARK: - PermissionRequest Handling
 
+    /// Resolve the effective permission mode for a session (per-session override > global default).
+    func effectivePermissionMode(for session: TrackedSession) -> PermissionMode {
+        session.permissionModeOverride ?? permissionMode
+    }
+
     private func handlePermissionRequest(event: HookEvent, replyHandler: @escaping (BridgeResponse) -> Void) {
-        switch permissionMode {
+        let session = sessions.first(where: { $0.session.sessionId == event.sessionId })
+        let mode = session.map { effectivePermissionMode(for: $0) } ?? permissionMode
+
+        switch mode {
         case .alwaysAllow:
-            // Auto-approve and reset session status back to running
-            if let session = sessions.first(where: { $0.session.sessionId == event.sessionId }) {
-                session.status = .running(nil)
-            }
+            session?.status = .running(nil)
             replyHandler(BridgeResponse.allow())
 
         case .observe, .manual:
+            // Check permission rules before showing UI
+            let toolName = event.toolName ?? ""
+            let input = event.payload.tool_input?.getString("command")
+                ?? event.payload.tool_input?.getString("file_path")
+                ?? event.payload.tool_input?.summary ?? ""
+
+            if let ruleIdx = permissionRules.firstIndex(where: { $0.matches(tool: toolName, input: input) }) {
+                permissionRules[ruleIdx].hitCount += 1
+                let action = permissionRules[ruleIdx].action
+                session?.status = .running(nil)
+                replyHandler(action == .allow ? BridgeResponse.allow() : BridgeResponse.deny(reason: "Denied by rule"))
+                return
+            }
+
             let request = PermissionRequest(event: event, replyHandler: replyHandler)
             pendingPermissions.append(request)
             isExpanded = true
             ChiptuneEngine.shared.playPermissionAlert()
         }
+    }
+
+    /// Add a rule to auto-approve future requests matching this tool+input pattern.
+    func addRuleFromRequest(_ request: PermissionRequest, action: PermissionRule.RuleAction) {
+        let toolName = request.toolName
+        // For Bash, extract the base command as pattern
+        var pattern = ""
+        if toolName == "Bash", let cmd = request.event.payload.tool_input?.getString("command") {
+            // Use first word of command as prefix pattern
+            let firstWord = cmd.split(separator: " ").first.map(String.init) ?? cmd
+            pattern = "^" + NSRegularExpression.escapedPattern(for: firstWord) + "\\b"
+        }
+        let rule = PermissionRule(toolName: toolName, inputPattern: pattern, action: action)
+        permissionRules.append(rule)
+        saveRules()
+    }
+
+    // MARK: - Rule Persistence
+
+    private static let rulesPath = NSHomeDirectory() + "/.config/code-island/permission-rules.json"
+
+    func loadRules() {
+        guard let data = FileManager.default.contents(atPath: Self.rulesPath),
+              let rules = try? JSONDecoder().decode([PermissionRule].self, from: data) else { return }
+        permissionRules = rules
+    }
+
+    func saveRules() {
+        let dir = (Self.rulesPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        guard let data = try? JSONEncoder().encode(permissionRules) else { return }
+        try? data.write(to: URL(fileURLWithPath: Self.rulesPath))
     }
 
     // MARK: - Permission Resolution
@@ -268,7 +333,12 @@ final class AppState {
     // MARK: - Session Management
 
     private func findOrCreateSession(for event: HookEvent) -> TrackedSession {
-        let agentType: AgentType = (lastEventSource == "codex") ? .codex : .claude
+        let agentType: AgentType
+        switch lastEventSource {
+        case "codex": agentType = .codex
+        case "droid": agentType = .droid
+        default: agentType = .claude
+        }
 
         guard let sessionId = event.payload.session_id else {
             // No session ID — create a transient one
@@ -331,6 +401,36 @@ final class AppState {
         }
 
         for session in sessions { session.checkAlive() }
+    }
+
+    // MARK: - Multi-Agent Orchestration
+
+    /// Sessions grouped by project (cwd).
+    var sessionsByProject: [String: [TrackedSession]] {
+        Dictionary(grouping: sessions.filter { $0.isAlive }) { $0.session.cwd }
+    }
+
+    /// Projects with multiple active sessions (potential orchestration).
+    var multiAgentProjects: [(project: String, sessions: [TrackedSession])] {
+        sessionsByProject
+            .filter { $0.value.count > 1 }
+            .map { (project: ($0.key as NSString).lastPathComponent, sessions: $0.value) }
+            .sorted { $0.sessions.count > $1.sessions.count }
+    }
+
+    /// Detect file conflicts: files being edited by multiple sessions in the same project.
+    var fileConflicts: [(file: String, sessions: [TrackedSession])] {
+        var fileToSessions: [String: [TrackedSession]] = [:]
+        for (_, projectSessions) in sessionsByProject {
+            for session in projectSessions {
+                for file in session.activeFiles {
+                    fileToSessions[file, default: []].append(session)
+                }
+            }
+        }
+        return fileToSessions
+            .filter { $0.value.count > 1 }
+            .map { (file: ($0.key as NSString).lastPathComponent, sessions: $0.value) }
     }
 
     // MARK: - Clawd Behavior
